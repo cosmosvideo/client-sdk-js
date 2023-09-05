@@ -1,5 +1,11 @@
 # Change Log
 
+## 1.13.3
+
+### Patch Changes
+
+- Disable opus RED when using E2EE - [#858](https://github.com/livekit/client-sdk-js/pull/858) ([@lukasIO](https://github.com/lukasIO))
+
 ## 1.13.2
 
 ### Patch Changes
