@@ -15,6 +15,7 @@ import {
   ReconnectResponse,
   RequestResponse,
   Room,
+  RoomMovedResponse,
   SessionDescription,
   SignalRequest,
   SignalResponse,
@@ -43,8 +44,9 @@ import log, { LoggerNames, getLogger } from '../logger';
 import { ConnectionError, ConnectionErrorReason } from '../room/errors';
 import CriticalTimers from '../room/timers';
 import type { LoggerOptions } from '../room/types';
-import { getClientInfo, isReactNative, sleep, toWebsocketUrl } from '../room/utils';
+import { getClientInfo, isReactNative, sleep } from '../room/utils';
 import { AsyncQueue } from '../utils/AsyncQueue';
+import { createRtcUrl, createValidateUrl } from './utils';
 
 // internal options
 interface ConnectOpts extends SignalOptions {
@@ -146,6 +148,8 @@ export class SignalClient {
   onRequestResponse?: (response: RequestResponse) => void;
 
   onLocalTrackSubscribed?: (trackSid: string) => void;
+
+  onRoomMoved?: (res: RoomMovedResponse) => void;
 
   connectOptions?: ConnectOpts;
 
@@ -258,13 +262,10 @@ export class SignalClient {
     abortSignal?: AbortSignal,
   ): Promise<JoinResponse | ReconnectResponse | undefined> {
     this.connectOptions = opts;
-    url = toWebsocketUrl(url);
-    // strip trailing slash
-    url = url.replace(/\/$/, '');
-    url += '/rtc';
-
     const clientInfo = getClientInfo();
     const params = createConnectionParams(token, clientInfo, opts);
+    const rtcUrl = createRtcUrl(url, params);
+    const validateUrl = createValidateUrl(rtcUrl);
 
     return new Promise<JoinResponse | ReconnectResponse | undefined>(async (resolve, reject) => {
       const unlock = await this.connectionLock.lock();
@@ -294,14 +295,19 @@ export class SignalClient {
           abortHandler();
         }
         abortSignal?.addEventListener('abort', abortHandler);
-        this.log.debug(
-          `connecting to ${url + params.replace(/access_token=([^&#$]*)/, 'access_token=<redacted>')}`,
-          this.logContext,
-        );
+        const redactedUrl = new URL(rtcUrl);
+        if (redactedUrl.searchParams.has('access_token')) {
+          redactedUrl.searchParams.set('access_token', '<redacted>');
+        }
+        this.log.debug(`connecting to ${redactedUrl}`, {
+          reconnect: opts.reconnect,
+          reconnectReason: opts.reconnectReason,
+          ...this.logContext,
+        });
         if (this.ws) {
           await this.close(false);
         }
-        this.ws = new WebSocket(url + params);
+        this.ws = new WebSocket(rtcUrl);
         this.ws.binaryType = 'arraybuffer';
 
         this.ws.onopen = () => {
@@ -313,14 +319,14 @@ export class SignalClient {
             this.state = SignalConnectionState.DISCONNECTED;
             clearTimeout(wsTimeout);
             try {
-              const resp = await fetch(`http${url.substring(2)}/validate${params}`);
+              const resp = await fetch(validateUrl);
               if (resp.status.toFixed(0).startsWith('4')) {
                 const msg = await resp.text();
                 reject(new ConnectionError(msg, ConnectionErrorReason.NotAllowed, resp.status));
               } else {
                 reject(
                   new ConnectionError(
-                    'Internal error',
+                    `Encountered unknown websocket error during connection: ${ev.toString()}`,
                     ConnectionErrorReason.InternalError,
                     resp.status,
                   ),
@@ -518,7 +524,7 @@ export class SignalClient {
   }
 
   sendIceCandidate(candidate: RTCIceCandidateInit, target: SignalTarget) {
-    this.log.trace('sending ice candidate', { ...this.logContext, candidate });
+    this.log.debug('sending ice candidate', { ...this.logContext, candidate });
     return this.sendRequest({
       case: 'trickle',
       value: new TrickleRequest({
@@ -771,6 +777,13 @@ export class SignalClient {
       if (this.onLocalTrackSubscribed) {
         this.onLocalTrackSubscribed(msg.value.trackSid);
       }
+    } else if (msg.case === 'roomMoved') {
+      if (this.onTokenRefresh) {
+        this.onTokenRefresh(msg.value.token);
+      }
+      if (this.onRoomMoved) {
+        this.onRoomMoved(msg.value);
+      }
     } else {
       this.log.debug('unsupported message', { ...this.logContext, msgCase: msg.case });
     }
@@ -883,7 +896,11 @@ export function toProtoSessionDescription(
   return sd;
 }
 
-function createConnectionParams(token: string, info: ClientInfo, opts: ConnectOpts): string {
+function createConnectionParams(
+  token: string,
+  info: ClientInfo,
+  opts: ConnectOpts,
+): URLSearchParams {
   const params = new URLSearchParams();
   params.set('access_token', token);
 
@@ -931,5 +948,5 @@ function createConnectionParams(token: string, info: ClientInfo, opts: ConnectOp
     params.set('network', navigator.connection.type);
   }
 
-  return `?${params.toString()}`;
+  return params;
 }

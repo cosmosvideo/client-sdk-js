@@ -7,11 +7,12 @@ import {
 } from '@livekit/protocol';
 import type { SignalClient } from '../../api/SignalClient';
 import type { StructuredLogger } from '../../logger';
+import { getBrowser } from '../../utils/browserParser';
 import { ScalabilityMode } from '../participant/publishUtils';
 import type { VideoSenderStats } from '../stats';
 import { computeBitrate, monitorFrequency } from '../stats';
 import type { LoggerOptions } from '../types';
-import { isFireFox, isMobile, isWeb } from '../utils';
+import { compareVersions, isFireFox, isMobile, isSVCCodec, isWeb } from '../utils';
 import LocalTrack from './LocalTrack';
 import { Track, VideoQuality } from './Track';
 import type { VideoCaptureOptions, VideoCodec } from './options';
@@ -238,7 +239,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
       );
     }
     this.log.debug(`setting publishing quality. max quality ${maxQuality}`, this.logContext);
-    this.setPublishingLayers(qualities);
+    this.setPublishingLayers(isSVCCodec(this.codec), qualities);
   }
 
   async restartTrack(options?: VideoCaptureOptions) {
@@ -333,7 +334,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
     });
     // only enable simulcast codec for preference codec setted
     if (!this.codec && codecs.length > 0) {
-      await this.setPublishingLayers(codecs[0].qualities);
+      await this.setPublishingLayers(isSVCCodec(codecs[0].codec), codecs[0].qualities);
       return [];
     }
 
@@ -342,7 +343,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
     const newCodecs: VideoCodec[] = [];
     for await (const codec of codecs) {
       if (!this.codec || this.codec === codec.codec) {
-        await this.setPublishingLayers(codec.qualities);
+        await this.setPublishingLayers(isSVCCodec(codec.codec), codec.qualities);
       } else {
         const simulcastCodecInfo = this.simulcastCodecs.get(codec.codec as VideoCodec);
         this.log.debug(`try setPublishingCodec for ${codec.codec}`, {
@@ -363,6 +364,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
             simulcastCodecInfo.encodings!,
             codec.qualities,
             this.senderLock,
+            isSVCCodec(codec.codec),
             this.log,
             this.logContext,
           );
@@ -376,7 +378,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
    * @internal
    * Sets layers that should be publishing
    */
-  async setPublishingLayers(qualities: SubscribedQuality[]) {
+  async setPublishingLayers(isSvc: boolean, qualities: SubscribedQuality[]) {
     this.log.debug('setting publishing layers', { ...this.logContext, qualities });
     if (!this.sender || !this.encodings) {
       return;
@@ -387,6 +389,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
       this.encodings,
       qualities,
       this.senderLock,
+      isSvc,
       this.log,
       this.logContext,
     );
@@ -433,6 +436,7 @@ async function setPublishingLayersForSender(
   senderEncodings: RTCRtpEncodingParameters[],
   qualities: SubscribedQuality[],
   senderLock: Mutex,
+  isSVC: boolean,
   log: StructuredLogger,
   logContext: Record<string, unknown>,
 ) {
@@ -455,18 +459,15 @@ async function setPublishingLayersForSender(
     }
 
     let hasChanged = false;
-
-    /* disable closable spatial layer as it has video blur / frozen issue with current server / client
-    1. chrome 113: when switching to up layer with scalability Mode change, it will generate a
-          low resolution frame and recover very quickly, but noticable
-    2. livekit sfu: additional pli request cause video frozen for a few frames, also noticable */
-    const closableSpatial = false;
+    const browser = getBrowser();
+    const closableSpatial =
+      browser?.name === 'Chrome' && compareVersions(browser?.version, '133') > 0;
     /* @ts-ignore */
     if (closableSpatial && encodings[0].scalabilityMode) {
       // svc dynacast encodings
       const encoding = encodings[0];
       /* @ts-ignore */
-      // const mode = new ScalabilityMode(encoding.scalabilityMode);
+      const mode = new ScalabilityMode(encoding.scalabilityMode);
       let maxQuality = ProtoVideoQuality.OFF;
       qualities.forEach((q) => {
         if (q.enabled && (maxQuality === ProtoVideoQuality.OFF || q.quality > maxQuality)) {
@@ -479,24 +480,33 @@ async function setPublishingLayersForSender(
           encoding.active = false;
           hasChanged = true;
         }
-      } else if (!encoding.active /* || mode.spatial !== maxQuality + 1*/) {
+      } else if (!encoding.active || mode.spatial !== maxQuality + 1) {
         hasChanged = true;
         encoding.active = true;
-        /*
-        @ts-ignore
-        const originalMode = new ScalabilityMode(senderEncodings[0].scalabilityMode)
+        /* @ts-ignore */
+        const originalMode = new ScalabilityMode(senderEncodings[0].scalabilityMode);
         mode.spatial = maxQuality + 1;
         mode.suffix = originalMode.suffix;
         if (mode.spatial === 1) {
           // no suffix for L1Tx
           mode.suffix = undefined;
         }
-        @ts-ignore
+        /* @ts-ignore */
         encoding.scalabilityMode = mode.toString();
         encoding.scaleResolutionDownBy = 2 ** (2 - maxQuality);
-      */
+        if (senderEncodings[0].maxBitrate) {
+          encoding.maxBitrate =
+            senderEncodings[0].maxBitrate /
+            (encoding.scaleResolutionDownBy * encoding.scaleResolutionDownBy);
+        }
       }
     } else {
+      if (isSVC) {
+        const hasEnabledEncoding = qualities.some((q) => q.enabled);
+        if (hasEnabledEncoding) {
+          qualities.forEach((q) => (q.enabled = true));
+        }
+      }
       // simulcast dynacast encodings
       encodings.forEach((encoding, idx) => {
         let rid = encoding.rid ?? '';

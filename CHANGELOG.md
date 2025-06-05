@@ -1,5 +1,161 @@
 # Change Log
 
+## 2.13.3
+
+### Patch Changes
+
+- Add media recorder types - [#1530](https://github.com/livekit/client-sdk-js/pull/1530) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.13.2
+
+### Patch Changes
+
+- Add LocalTrackRecorder helper - [#1430](https://github.com/livekit/client-sdk-js/pull/1430) ([@lukasIO](https://github.com/lukasIO))
+
+- fix: skip default device selection on iOS - [#1528](https://github.com/livekit/client-sdk-js/pull/1528) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.13.1
+
+### Patch Changes
+
+- fix: don't try to set audio output on Safari without explicit user interaction - [#1527](https://github.com/livekit/client-sdk-js/pull/1527) ([@lukasIO](https://github.com/lukasIO))
+
+- Fix svc encoding for safari 18.4 - [#1519](https://github.com/livekit/client-sdk-js/pull/1519) ([@cnderrauber](https://github.com/cnderrauber))
+
+- feat: add MediaDeviceKind to media device error event - [#1525](https://github.com/livekit/client-sdk-js/pull/1525) ([@lukasIO](https://github.com/lukasIO))
+
+- fix: remove track from transceiver if add request failed - [#1524](https://github.com/livekit/client-sdk-js/pull/1524) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.13.0
+
+### Minor Changes
+
+- Unorder the lossy data channel - [#1512](https://github.com/livekit/client-sdk-js/pull/1512) ([@bcherry](https://github.com/bcherry))
+
+- Add ParticipantActive event to signal data message readiness - [#1517](https://github.com/livekit/client-sdk-js/pull/1517) ([@lukasIO](https://github.com/lukasIO))
+
+### Patch Changes
+
+- Respect facingMode in createLocalTracks - [#1514](https://github.com/livekit/client-sdk-js/pull/1514) ([@lukasIO](https://github.com/lukasIO))
+
+- fix(datastreams): forward attributes on streamBytes API - [#1518](https://github.com/livekit/client-sdk-js/pull/1518) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.12.0
+
+### Minor Changes
+
+- Support moving participant to another room - [#1511](https://github.com/livekit/client-sdk-js/pull/1511) ([@cnderrauber](https://github.com/cnderrauber))
+
+- feature: E2E Allow sharing ratcheted material out-of-band - [#1503](https://github.com/livekit/client-sdk-js/pull/1503) ([@BillCarsonFr](https://github.com/BillCarsonFr))
+
+### Patch Changes
+
+- Catch failing set sink id promise - [#1508](https://github.com/livekit/client-sdk-js/pull/1508) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.11.4
+
+### Patch Changes
+
+- Ensure userProvided tracks are not overriden from within the SDK - [#1500](https://github.com/livekit/client-sdk-js/pull/1500) ([@lukasIO](https://github.com/lukasIO))
+
+- Revert "Add option (`KeyProviderOptions`) to allowKeyExtraction." - [#1502](https://github.com/livekit/client-sdk-js/pull/1502) ([@toger5](https://github.com/toger5))
+
+## 2.11.3
+
+### Patch Changes
+
+- Convert URL Scheme When Creating WebSocket Object - [#1492](https://github.com/livekit/client-sdk-js/pull/1492) ([@rktguswjd](https://github.com/rktguswjd))
+
+- fix: avoid mutating create track options - [#1497](https://github.com/livekit/client-sdk-js/pull/1497) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.11.2
+
+### Patch Changes
+
+- fix: request audio/video in create local track helpers - [#1485](https://github.com/livekit/client-sdk-js/pull/1485) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.11.1
+
+### Patch Changes
+
+- fix: device handling follow up - [#1483](https://github.com/livekit/client-sdk-js/pull/1483) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.11.0
+
+### Minor Changes
+
+- Defer publishing until signal is connected - [#1465](https://github.com/livekit/client-sdk-js/pull/1465) ([@lukasIO](https://github.com/lukasIO))
+
+- Address chrome ideal device handling change by defaulting to exact device matching - [#1478](https://github.com/livekit/client-sdk-js/pull/1478) ([@lukasIO](https://github.com/lukasIO))
+
+### Patch Changes
+
+- Add streamBytes method - [#1473](https://github.com/livekit/client-sdk-js/pull/1473) ([@lukasIO](https://github.com/lukasIO))
+
+- Default to exact matching and retry on unspecified ideal narrowing - [#1479](https://github.com/livekit/client-sdk-js/pull/1479) ([@lukasIO](https://github.com/lukasIO))
+
+- fix: search params for older browsers - [#1480](https://github.com/livekit/client-sdk-js/pull/1480) ([@radko93](https://github.com/radko93))
+
+## 2.10.0
+
+### Minor Changes
+
+- Add prefer regression for backup codec policy - [#1456](https://github.com/livekit/client-sdk-js/pull/1456) ([@cnderrauber](https://github.com/cnderrauber))
+
+### Patch Changes
+
+- Improve error message for WS errors during connection attempt - [#1466](https://github.com/livekit/client-sdk-js/pull/1466) ([@lukasIO](https://github.com/lukasIO))
+
+- Closable spatial layers for svc encoding - [#1458](https://github.com/livekit/client-sdk-js/pull/1458) ([@cnderrauber](https://github.com/cnderrauber))
+
+- Improve connection URL handling and add unit tests - [#1468](https://github.com/livekit/client-sdk-js/pull/1468) ([@lukasIO](https://github.com/lukasIO))
+
+- Pass facingMode to initial getUserMedia call in track restart - [#1451](https://github.com/livekit/client-sdk-js/pull/1451) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.9.9
+
+### Patch Changes
+
+- Fix trailing slash handling in WebSocket URL pathname - [#1440](https://github.com/livekit/client-sdk-js/pull/1440) ([@Tanney-102](https://github.com/Tanney-102))
+
+- Skip incoming track if it's ended - [#1438](https://github.com/livekit/client-sdk-js/pull/1438) ([@lukasIO](https://github.com/lukasIO))
+
+- Ensure only suspended audio context gets resumed - [#1452](https://github.com/livekit/client-sdk-js/pull/1452) ([@lukasIO](https://github.com/lukasIO))
+
+- Do not log transcription received events - [#1453](https://github.com/livekit/client-sdk-js/pull/1453) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.9.8
+
+### Patch Changes
+
+- Use string instead of passing url object to WebSocket constructor - [#1443](https://github.com/livekit/client-sdk-js/pull/1443) ([@davidliu](https://github.com/davidliu))
+
+## 2.9.7
+
+### Patch Changes
+
+- Add attributes to SendTextOptions - [#1441](https://github.com/livekit/client-sdk-js/pull/1441) ([@lukasIO](https://github.com/lukasIO))
+
+## 2.9.6
+
+### Patch Changes
+
+- Automatically attempt to resume suspended audio contexts on click - [#1431](https://github.com/livekit/client-sdk-js/pull/1431) ([@lukasIO](https://github.com/lukasIO))
+
+- Fix ignored constraints in LocalTrack.restart - [#1435](https://github.com/livekit/client-sdk-js/pull/1435) ([@rktguswjd](https://github.com/rktguswjd))
+
+- log ice candidates as debug rather than trace - [#1437](https://github.com/livekit/client-sdk-js/pull/1437) ([@haydenbr](https://github.com/haydenbr))
+
+- fix: handle server url with params correctly - [#1366](https://github.com/livekit/client-sdk-js/pull/1366) ([@jiyeyuran](https://github.com/jiyeyuran))
+
+## 2.9.5
+
+### Patch Changes
+
+- fix: properly remove text stream controllers on stream close - [#1422](https://github.com/livekit/client-sdk-js/pull/1422) ([@lukasIO](https://github.com/lukasIO))
+
+- Reject publishing with insufficient permissions present - [#1418](https://github.com/livekit/client-sdk-js/pull/1418) ([@lukasIO](https://github.com/lukasIO))
+
 ## 2.9.4
 
 ### Patch Changes

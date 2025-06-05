@@ -65,7 +65,7 @@ import { ConnectionError, ConnectionErrorReason, UnsupportedServer } from './err
 import { EngineEvent, ParticipantEvent, RoomEvent, TrackEvent } from './events';
 import LocalParticipant from './participant/LocalParticipant';
 import type Participant from './participant/Participant';
-import type { ConnectionQuality } from './participant/Participant';
+import { type ConnectionQuality, ParticipantKind } from './participant/Participant';
 import RemoteParticipant from './participant/RemoteParticipant';
 import { MAX_PAYLOAD_BYTES, RpcError, type RpcInvocationData, byteLength } from './rpc';
 import CriticalTimers from './timers';
@@ -79,7 +79,7 @@ import { Track } from './track/Track';
 import type { TrackPublication } from './track/TrackPublication';
 import type { TrackProcessor } from './track/processor/types';
 import type { AdaptiveStreamSettings } from './track/types';
-import { getNewAudioContext, sourceToKind } from './track/utils';
+import { getNewAudioContext, kindToSource, sourceToKind } from './track/utils';
 import {
   type ByteStreamInfo,
   type ChatMessage,
@@ -103,7 +103,7 @@ import {
   isLocalParticipant,
   isReactNative,
   isRemotePub,
-  isSafari,
+  isSafariBased,
   isWeb,
   numberToBigInt,
   sleep,
@@ -591,6 +591,25 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
           trackPublication,
           this.localParticipant,
         );
+      })
+      .on(EngineEvent.RoomMoved, (roomMoved) => {
+        this.log.debug('room moved', roomMoved);
+
+        if (roomMoved.room) {
+          this.handleRoomUpdate(roomMoved.room);
+        }
+
+        this.remoteParticipants.forEach((participant, identity) => {
+          this.handleParticipantDisconnected(identity, participant);
+        });
+
+        this.emit(RoomEvent.Moved, roomMoved.room!.name, roomMoved.token);
+
+        if (roomMoved.participant) {
+          this.handleParticipantUpdates([roomMoved.participant, ...roomMoved.otherParticipants]);
+        } else {
+          this.handleParticipantUpdates(roomMoved.otherParticipants);
+        }
       });
 
     if (this.localParticipant) {
@@ -1282,7 +1301,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
    *  `audiooutput` to set speaker for all incoming audio tracks
    * @param deviceId
    */
-  async switchActiveDevice(kind: MediaDeviceKind, deviceId: string, exact: boolean = false) {
+  async switchActiveDevice(kind: MediaDeviceKind, deviceId: string, exact: boolean = true) {
     let success = true;
     let needsUpdateWithoutTracks = false;
     const deviceConstraint = exact ? { exact: deviceId } : deviceId;
@@ -1339,6 +1358,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
           // @ts-expect-error setSinkId is not yet in the typescript type of AudioContext
           this.audioContext?.setSinkId(deviceId);
         }
+
         // also set audio output on all audio elements, even if webAudioMix is enabled in order to workaround echo cancellation not working on chrome with non-default output devices
         // see https://issues.chromium.org/issues/40252911#comment7
         await Promise.all(
@@ -1423,6 +1443,10 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       this.log.warn('skipping incoming track after Room disconnected', this.logContext);
       return;
     }
+    if (mediaTrack.readyState === 'ended') {
+      this.log.info('skipping incoming track as it already ended', this.logContext);
+      return;
+    }
     const parts = unpackStreamId(stream.id);
     const participantSid = parts[0];
     let streamId = parts[1];
@@ -1456,6 +1480,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         adaptiveStreamSettings = {};
       }
     }
+
     participant.addSubscribedMediaTrack(
       mediaTrack,
       trackId,
@@ -1622,6 +1647,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       participant.unpublishTrack(publication.trackSid, true);
     });
     this.emit(RoomEvent.ParticipantDisconnected, participant);
+    participant.setDisconnected();
     this.localParticipant?.handleParticipantDisconnected(participant.identity);
   }
 
@@ -1868,14 +1894,13 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
 
   private handleStreamTrailer(trailer: DataStream_Trailer) {
     const textBuffer = this.textStreamControllers.get(trailer.streamId);
-
     if (textBuffer) {
       textBuffer.info.attributes = {
         ...textBuffer.info.attributes,
         ...trailer.attributes,
       };
       textBuffer.controller.close();
-      this.byteStreamControllers.delete(trailer.streamId);
+      this.textStreamControllers.delete(trailer.streamId);
     }
 
     const fileBuffer = this.byteStreamControllers.get(trailer.streamId);
@@ -2034,9 +2059,14 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       }
     }
 
-    // inputs are automatically handled via TrackEvent.Ended causing a TrackEvent.Restarted. Here we only need to worry about audiooutputs changing
     const kinds: MediaDeviceKind[] = ['audiooutput', 'audioinput', 'videoinput'];
     for (let kind of kinds) {
+      const targetSource = kindToSource(kind);
+      const targetPublication = this.localParticipant.getTrackPublication(targetSource);
+      if (targetPublication && targetPublication.track?.isUserProvided) {
+        // if the track is user provided, we don't want to switch devices on behalf of the user
+        continue;
+      }
       const devicesOfKind = availableDevices.filter((d) => d.kind === kind);
       const activeDevice = this.getActiveDevice(kind);
 
@@ -2050,21 +2080,21 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         }
       }
 
-      if ((kind === 'audioinput' && !isSafari()) || kind === 'videoinput') {
+      if ((kind === 'audioinput' && !isSafariBased()) || kind === 'videoinput') {
         // airpods on Safari need special handling for audioinput as the track doesn't end as soon as you take them out
         continue;
       }
       // switch to first available device if previously active device is not available any more
       if (
         devicesOfKind.length > 0 &&
-        !devicesOfKind.find((deviceInfo) => deviceInfo.deviceId === this.getActiveDevice(kind))
+        !devicesOfKind.find((deviceInfo) => deviceInfo.deviceId === this.getActiveDevice(kind)) &&
+        // avoid switching audio output on safari without explicit user action as it leads to slowed down audio playback
+        (kind !== 'audiooutput' || !isSafariBased())
       ) {
         console.log('switching to second device', devicesOfKind[0].deviceId);
         await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
       }
     }
-
-    this.emit(RoomEvent.MediaDevicesChanged);
   }, 500);
 
   private handleRoomUpdate = (room: RoomModel) => {
@@ -2252,6 +2282,12 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
           status,
           participant,
         );
+      })
+      .on(ParticipantEvent.Active, () => {
+        this.emitWhenConnected(RoomEvent.ParticipantActive, participant);
+        if (participant.kind === ParticipantKind.AGENT) {
+          this.localParticipant.setActiveAgent(participant);
+        }
       });
 
     // update info at the end after callbacks have been set up
@@ -2444,8 +2480,8 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     this.emit(RoomEvent.ConnectionQualityChanged, quality, this.localParticipant);
   };
 
-  private onMediaDevicesError = (e: Error) => {
-    this.emit(RoomEvent.MediaDevicesError, e);
+  private onMediaDevicesError = (e: Error, kind?: MediaDeviceKind) => {
+    this.emit(RoomEvent.MediaDevicesError, e, kind);
   };
 
   private onLocalParticipantPermissionsChanged = (prevPermissions?: ParticipantPermission) => {
@@ -2609,7 +2645,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     ...args: Parameters<RoomEventCallbacks[E]>
   ): boolean {
     // active speaker updates are too spammy
-    if (event !== RoomEvent.ActiveSpeakersChanged) {
+    if (event !== RoomEvent.ActiveSpeakersChanged && event !== RoomEvent.TranscriptionReceived) {
       // only extract logContext from arguments in order to avoid logging the whole object tree
       const minimizedArgs = mapArgs(args).filter((arg: unknown) => arg !== undefined);
       this.log.debug(`room event ${event}`, { ...this.logContext, event, args: minimizedArgs });
@@ -2642,6 +2678,7 @@ export type RoomEventCallbacks = {
   reconnected: () => void;
   disconnected: (reason?: DisconnectReason) => void;
   connectionStateChanged: (state: ConnectionState) => void;
+  moved: (name: string, token: string) => void;
   mediaDevicesChanged: () => void;
   participantConnected: (participant: RemoteParticipant) => void;
   participantDisconnected: (participant: RemoteParticipant) => void;
@@ -2698,7 +2735,7 @@ export type RoomEventCallbacks = {
     publication?: TrackPublication,
   ) => void;
   connectionQualityChanged: (quality: ConnectionQuality, participant: Participant) => void;
-  mediaDevicesError: (error: Error) => void;
+  mediaDevicesError: (error: Error, kind?: MediaDeviceKind) => void;
   trackStreamStateChanged: (
     publication: RemoteTrackPublication,
     streamState: Track.StreamState,
@@ -2726,4 +2763,5 @@ export type RoomEventCallbacks = {
   chatMessage: (message: ChatMessage, participant?: RemoteParticipant | LocalParticipant) => void;
   localTrackSubscribed: (publication: LocalTrackPublication, participant: LocalParticipant) => void;
   metricsReceived: (metrics: MetricsBatch, participant?: Participant) => void;
+  participantActive: (participant: Participant) => void;
 };

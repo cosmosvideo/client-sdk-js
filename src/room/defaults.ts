@@ -19,10 +19,11 @@ export const publishDefaults: TrackPublishDefaults = {
   stopMicTrackOnMute: false,
   videoCodec: defaultVideoCodec,
   backupCodec: true,
+  preConnectBuffer: false,
 } as const;
 
 export const audioDefaults: AudioCaptureOptions = {
-  deviceId: 'default',
+  deviceId: { ideal: 'default' },
   autoGainControl: true,
   echoCancellation: true,
   noiseSuppression: true,
@@ -30,7 +31,7 @@ export const audioDefaults: AudioCaptureOptions = {
 };
 
 export const videoDefaults: VideoCaptureOptions = {
-  deviceId: 'default',
+  deviceId: { ideal: 'default' },
   resolution: VideoPresets.h720.resolution,
 };
 

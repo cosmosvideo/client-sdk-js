@@ -16,6 +16,7 @@ import {
   type ReconnectResponse,
   RequestResponse,
   Room as RoomModel,
+  RoomMovedResponse,
   RpcAck,
   RpcResponse,
   SignalTarget,
@@ -215,7 +216,7 @@ export default class RTCEngine extends (EventEmitter as new () => TypedEventEmit
       room: this.latestJoinResponse?.room?.name,
       roomID: this.latestJoinResponse?.room?.sid,
       participant: this.latestJoinResponse?.participant?.identity,
-      pID: this.latestJoinResponse?.participant?.sid,
+      pID: this.participantSid,
     };
   }
 
@@ -248,6 +249,7 @@ export default class RTCEngine extends (EventEmitter as new () => TypedEventEmit
       }
 
       this.clientConfiguration = joinResponse.clientConfiguration;
+      this.emit(EngineEvent.SignalConnected, joinResponse);
       return joinResponse;
     } catch (e) {
       if (e instanceof ConnectionError) {
@@ -325,7 +327,7 @@ export default class RTCEngine extends (EventEmitter as new () => TypedEventEmit
         reject(
           new ConnectionError(
             'publication of local track timed out, no response from server',
-            ConnectionErrorReason.InternalError,
+            ConnectionErrorReason.Timeout,
           ),
         );
       }, 10_000);
@@ -474,7 +476,7 @@ export default class RTCEngine extends (EventEmitter as new () => TypedEventEmit
       if (!this.pcManager) {
         return;
       }
-      this.log.trace('got ICE candidate from peer', { ...this.logContext, candidate, target });
+      this.log.debug('got ICE candidate from peer', { ...this.logContext, candidate, target });
       this.pcManager.addIceCandidate(candidate, target);
     };
 
@@ -523,6 +525,14 @@ export default class RTCEngine extends (EventEmitter as new () => TypedEventEmit
 
     this.client.onSubscribedQualityUpdate = (update: SubscribedQualityUpdate) => {
       this.emit(EngineEvent.SubscribedQualityUpdate, update);
+    };
+
+    this.client.onRoomMoved = (res: RoomMovedResponse) => {
+      this.participantSid = res.participant?.sid;
+      if (this.latestJoinResponse) {
+        this.latestJoinResponse.room = res.room;
+      }
+      this.emit(EngineEvent.RoomMoved, res);
     };
 
     this.client.onClose = () => {
@@ -612,8 +622,7 @@ export default class RTCEngine extends (EventEmitter as new () => TypedEventEmit
 
     // create data channels
     this.lossyDC = this.pcManager.createPublisherDataChannel(lossyDataChannel, {
-      // will drop older packets that arrive
-      ordered: true,
+      ordered: false,
       maxRetransmits: 0,
     });
     this.reliableDC = this.pcManager.createPublisherDataChannel(reliableDataChannel, {
@@ -1489,6 +1498,7 @@ export type EngineEventCallbacks = {
   dcBufferStatusChanged: (isLow: boolean, kind: DataPacket_Kind) => void;
   participantUpdate: (infos: ParticipantInfo[]) => void;
   roomUpdate: (room: RoomModel) => void;
+  roomMoved: (room: RoomMovedResponse) => void;
   connectionQualityUpdate: (update: ConnectionQualityUpdate) => void;
   speakersChanged: (speakerUpdates: SpeakerInfo[]) => void;
   streamStateChanged: (update: StreamStateUpdate) => void;
@@ -1500,6 +1510,7 @@ export type EngineEventCallbacks = {
   remoteMute: (trackSid: string, muted: boolean) => void;
   offline: () => void;
   signalRequestResponse: (response: RequestResponse) => void;
+  signalConnected: (joinResp: JoinResponse) => void;
 };
 
 function supportOptionalDatachannel(protocol: number | undefined): boolean {

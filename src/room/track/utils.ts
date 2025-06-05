@@ -1,4 +1,4 @@
-import { TrackPublishedResponse } from '@livekit/protocol';
+import { TrackPublishedResponse, TrackSource } from '@livekit/protocol';
 import type { AudioProcessorOptions, TrackProcessor, VideoProcessorOptions } from '../..';
 import { cloneDeep } from '../../utils/cloneDeep';
 import { isSafari, sleep } from '../utils';
@@ -23,7 +23,7 @@ export function mergeDefaultOptions(
   );
   const defaultAudioProcessor = audioDefaults?.processor;
   const defaultVideoProcessor = videoDefaults?.processor;
-  const clonedOptions: CreateLocalTracksOptions = cloneDeep(optionsWithoutProcessor) ?? {};
+  const clonedOptions: CreateLocalTracksOptions = optionsWithoutProcessor ?? {};
   if (clonedOptions.audio === true) clonedOptions.audio = {};
   if (clonedOptions.video === true) clonedOptions.video = {};
 
@@ -33,7 +33,7 @@ export function mergeDefaultOptions(
       clonedOptions.audio as Record<string, unknown>,
       audioDefaults as Record<string, unknown>,
     );
-    clonedOptions.audio.deviceId ??= 'default';
+    clonedOptions.audio.deviceId ??= { ideal: 'default' };
     if (audioProcessor || defaultAudioProcessor) {
       clonedOptions.audio.processor = audioProcessor ?? defaultAudioProcessor;
     }
@@ -43,7 +43,7 @@ export function mergeDefaultOptions(
       clonedOptions.video as Record<string, unknown>,
       videoDefaults as Record<string, unknown>,
     );
-    clonedOptions.video.deviceId ??= 'default';
+    clonedOptions.video.deviceId ??= { ideal: 'default' };
     if (videoProcessor || defaultVideoProcessor) {
       clonedOptions.video.processor = videoProcessor ?? defaultVideoProcessor;
     }
@@ -81,9 +81,9 @@ export function constraintsForOptions(options: CreateLocalTracksOptions): MediaS
         }
       });
       constraints.video = videoOptions;
-      constraints.video.deviceId ??= 'default';
+      constraints.video.deviceId ??= { ideal: 'default' };
     } else {
-      constraints.video = options.video ? { deviceId: 'default' } : false;
+      constraints.video = options.video ? { deviceId: { ideal: 'default' } } : false;
     }
   } else {
     constraints.video = false;
@@ -92,9 +92,9 @@ export function constraintsForOptions(options: CreateLocalTracksOptions): MediaS
   if (options.audio) {
     if (typeof options.audio === 'object') {
       constraints.audio = options.audio;
-      constraints.audio.deviceId ??= 'default';
+      constraints.audio.deviceId ??= { ideal: 'default' };
     } else {
-      constraints.audio = { deviceId: 'default' };
+      constraints.audio = { deviceId: { ideal: 'default' } };
     }
   } else {
     constraints.audio = false;
@@ -133,7 +133,27 @@ export function getNewAudioContext(): AudioContext | void {
     // @ts-ignore
     typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (AudioContext) {
-    return new AudioContext({ latencyHint: 'interactive' });
+    const audioContext = new AudioContext({ latencyHint: 'interactive' });
+    // If the audio context is suspended, we need to resume it when the user clicks on the page
+    if (
+      audioContext.state === 'suspended' &&
+      typeof window !== 'undefined' &&
+      window.document?.body
+    ) {
+      const handleResume = async () => {
+        try {
+          if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+          }
+        } catch (e) {
+          console.warn('Error trying to auto-resume audio context', e);
+        }
+
+        window.document.body?.removeEventListener('click', handleResume);
+      };
+      window.document.body.addEventListener('click', handleResume);
+    }
+    return audioContext;
   }
 }
 
@@ -292,5 +312,20 @@ export function extractProcessorsFromOptions(options: CreateLocalTracksOptions) 
     newOptions.video = { ...newOptions.video, processor: undefined };
   }
 
-  return { audioProcessor, videoProcessor, optionsWithoutProcessor: newOptions };
+  return { audioProcessor, videoProcessor, optionsWithoutProcessor: cloneDeep(newOptions) };
+}
+
+export function getTrackSourceFromProto(source: TrackSource): Track.Source {
+  switch (source) {
+    case TrackSource.CAMERA:
+      return Track.Source.Camera;
+    case TrackSource.MICROPHONE:
+      return Track.Source.Microphone;
+    case TrackSource.SCREEN_SHARE:
+      return Track.Source.ScreenShare;
+    case TrackSource.SCREEN_SHARE_AUDIO:
+      return Track.Source.ScreenShareAudio;
+    default:
+      return Track.Source.Unknown;
+  }
 }

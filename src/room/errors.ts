@@ -16,6 +16,7 @@ export enum ConnectionErrorReason {
   InternalError,
   Cancelled,
   LeaveRequest,
+  Timeout,
 }
 
 export class ConnectionError extends LivekitError {
@@ -81,6 +82,16 @@ export class PublishDataError extends LivekitError {
   constructor(message?: string) {
     super(14, message ?? 'unable to publish data');
     this.name = 'PublishDataError';
+  }
+}
+
+export class PublishTrackError extends LivekitError {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(15, message);
+    this.name = 'PublishTrackError';
+    this.status = status;
   }
 }
 
