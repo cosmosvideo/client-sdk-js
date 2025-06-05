@@ -1,7 +1,7 @@
 import { Codec, ParticipantInfo, ParticipantPermission } from '@livekit/protocol';
 import type { InternalRoomOptions } from '../../options';
 import type RTCEngine from '../RTCEngine';
-import { TextStreamWriter } from '../StreamWriter';
+import { ByteStreamWriter, TextStreamWriter } from '../StreamWriter';
 import { type PerformRpcParams, type RpcInvocationData } from '../rpc';
 import LocalTrack from '../track/LocalTrack';
 import LocalTrackPublication from '../track/LocalTrackPublication';
@@ -10,6 +10,7 @@ import type { AudioCaptureOptions, BackupVideoCodec, CreateLocalTracksOptions, S
 import { type ChatMessage, type DataPublishOptions, type SendTextOptions, type StreamTextOptions, type TextStreamInfo } from '../types';
 import Participant from './Participant';
 import type { ParticipantTrackPermission } from './ParticipantTrackPermission';
+import type RemoteParticipant from './RemoteParticipant';
 export default class LocalParticipant extends Participant {
     audioTrackPublications: Map<string, LocalTrackPublication>;
     videoTrackPublications: Map<string, LocalTrackPublication>;
@@ -29,6 +30,9 @@ export default class LocalParticipant extends Participant {
     private roomOptions;
     private encryptionType;
     private reconnectFuture?;
+    private signalConnectedFuture?;
+    private activeAgentFuture?;
+    private firstActiveAgent?;
     private rpcHandlers;
     private pendingSignalRequests;
     private enabledPublishVideoCodecs;
@@ -48,6 +52,7 @@ export default class LocalParticipant extends Participant {
     private handleReconnecting;
     private handleReconnected;
     private handleDisconnected;
+    private handleSignalConnected;
     private handleSignalRequestResponse;
     private handleDataPacket;
     /**
@@ -125,6 +130,8 @@ export default class LocalParticipant extends Participant {
      */
     publishTrack(track: LocalTrack | MediaStreamTrack, options?: TrackPublishOptions): Promise<LocalTrackPublication>;
     private publishOrRepublishTrack;
+    private waitUntilEngineConnected;
+    private hasPermissionsToPublish;
     private publish;
     get isLocal(): boolean;
     /** @internal
@@ -172,6 +179,15 @@ export default class LocalParticipant extends Participant {
         id: string;
     }>;
     private _sendFile;
+    streamBytes(options?: {
+        name?: string;
+        topic?: string;
+        attributes?: Record<string, string>;
+        destinationIdentities?: Array<string>;
+        streamId?: string;
+        mimeType?: string;
+        totalSize?: number;
+    }): Promise<ByteStreamWriter>;
     /**
      * Initiate an RPC call to a remote participant
      * @param params - Parameters for initiating the RPC call, see {@link PerformRpcParams}
@@ -216,6 +232,9 @@ export default class LocalParticipant extends Participant {
     /** @internal */
     updateInfo(info: ParticipantInfo): boolean;
     private updateTrackSubscriptionPermissions;
+    /** @internal */
+    setActiveAgent(agent: RemoteParticipant | undefined): void;
+    private waitUntilActiveAgentPresent;
     /** @internal */
     private onTrackUnmuted;
     /** @internal */

@@ -10,7 +10,7 @@ declare class BaseStreamWriter<T, InfoType extends BaseStreamInfo> {
 }
 export declare class TextStreamWriter extends BaseStreamWriter<string, TextStreamInfo> {
 }
-export declare class BinaryStreamWriter extends BaseStreamWriter<Uint8Array, ByteStreamInfo> {
+export declare class ByteStreamWriter extends BaseStreamWriter<Uint8Array, ByteStreamInfo> {
 }
 export {};
 //# sourceMappingURL=StreamWriter.d.ts.map

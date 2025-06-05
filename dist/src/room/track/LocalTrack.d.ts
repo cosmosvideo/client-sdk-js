@@ -3,9 +3,11 @@ import type { LoggerOptions } from '../types';
 import { Track } from './Track';
 import type { VideoCodec } from './options';
 import type { TrackProcessor } from './processor/types';
+import { LocalTrackRecorder } from './record';
 import type { ReplaceTrackOptions } from './types';
 export default abstract class LocalTrack<TrackKind extends Track.Kind = Track.Kind> extends Track<TrackKind> {
     protected _sender?: RTCRtpSender;
+    private autoStopPreConnectBuffer;
     /** @internal */
     get sender(): RTCRtpSender | undefined;
     /** @internal */
@@ -13,6 +15,7 @@ export default abstract class LocalTrack<TrackKind extends Track.Kind = Track.Ki
     /** @internal */
     codec?: VideoCodec;
     get constraints(): MediaTrackConstraints;
+    get hasPreConnectBuffer(): boolean;
     protected _constraints: MediaTrackConstraints;
     protected reacquireTrack: boolean;
     protected providedByUser: boolean;
@@ -23,6 +26,7 @@ export default abstract class LocalTrack<TrackKind extends Track.Kind = Track.Ki
     protected processorLock: Mutex;
     protected audioContext?: AudioContext;
     protected manuallyStopped: boolean;
+    protected localTrackRecorder: LocalTrackRecorder<typeof this> | undefined;
     private restartLock;
     /**
      *
@@ -100,6 +104,12 @@ export default abstract class LocalTrack<TrackKind extends Track.Kind = Track.Ki
      * @returns
      */
     stopProcessor(keepElement?: boolean): Promise<void>;
+    /** @internal */
+    startPreConnectBuffer(timeslice?: number): void;
+    /** @internal */
+    stopPreConnectBuffer(): void;
+    /** @internal */
+    getPreConnectBuffer(): ReadableStream<Uint8Array<ArrayBufferLike>> | undefined;
     protected abstract monitorSender(): void;
 }
 //# sourceMappingURL=LocalTrack.d.ts.map

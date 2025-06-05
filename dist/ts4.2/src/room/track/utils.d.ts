@@ -1,4 +1,4 @@
-import { TrackPublishedResponse } from '@livekit/protocol';
+import { TrackPublishedResponse, TrackSource } from '@livekit/protocol';
 import type { AudioProcessorOptions, TrackProcessor, VideoProcessorOptions } from '../..';
 import { Track } from './Track';
 import type { TrackPublication } from './TrackPublication';
@@ -41,4 +41,5 @@ export declare function extractProcessorsFromOptions(options: CreateLocalTracksO
         video?: boolean | VideoCaptureOptions;
     };
 };
+export declare function getTrackSourceFromProto(source: TrackSource): Track.Source;
 //# sourceMappingURL=utils.d.ts.map

@@ -103,6 +103,14 @@ export interface TrackPublishDefaults {
      * defaults to false
      */
     stopMicTrackOnMute?: boolean;
+    /**
+     * Enables preconnect buffer for a user's microphone track.
+     * This is useful for reducing perceived latency when the user starts to speak before the connection is established.
+     * Only works for agent use cases.
+     *
+     * Defaults to false.
+     */
+    preConnectBuffer?: boolean;
 }
 /**
  * Options when publishing tracks
@@ -285,8 +293,9 @@ export type VideoCodec = (typeof videoCodecs)[number];
 export type BackupVideoCodec = (typeof backupCodecs)[number];
 export declare function isBackupCodec(codec: string): codec is BackupVideoCodec;
 export declare enum BackupCodecPolicy {
-    REGRESSION = 0,
-    SIMULCAST = 1
+    PREFER_REGRESSION = 0,
+    SIMULCAST = 1,
+    REGRESSION = 2
 }
 /**
  * scalability modes for svc.

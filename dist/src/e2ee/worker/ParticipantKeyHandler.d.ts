@@ -1,6 +1,6 @@
 import type TypedEventEmitter from 'typed-emitter';
 import { type ParticipantKeyHandlerCallbacks } from '../events';
-import type { KeyProviderOptions, KeySet } from '../types';
+import type { KeyProviderOptions, KeySet, RatchetResult } from '../types';
 declare const ParticipantKeyHandler_base: new () => TypedEventEmitter<ParticipantKeyHandlerCallbacks>;
 /**
  * ParticipantKeyHandler is responsible for providing a cryptor instance with the
@@ -54,7 +54,7 @@ export declare class ParticipantKeyHandler extends ParticipantKeyHandler_base {
      * @param keyIndex
      * @param setKey
      */
-    ratchetKey(keyIndex?: number, setKey?: boolean): Promise<CryptoKey>;
+    ratchetKey(keyIndex?: number, setKey?: boolean): Promise<RatchetResult>;
     /**
      * takes in a key material with `deriveBits` and `deriveKey` set as key usages
      * and derives encryption keys from the material and sets it on the key ring buffer
@@ -68,8 +68,8 @@ export declare class ParticipantKeyHandler extends ParticipantKeyHandler_base {
      * together with the material
      * also updates the currentKeyIndex
      */
-    setKeyFromMaterial(material: CryptoKey, keyIndex: number, emitRatchetEvent?: boolean): Promise<void>;
-    setKeySet(keySet: KeySet, keyIndex: number, emitRatchetEvent?: boolean): void;
+    setKeyFromMaterial(material: CryptoKey, keyIndex: number, ratchetedResult?: RatchetResult | null): Promise<void>;
+    setKeySet(keySet: KeySet, keyIndex: number, ratchetedResult?: RatchetResult | null): void;
     setCurrentKeyIndex(index: number): Promise<void>;
     getCurrentKeyIndex(): number;
     /**

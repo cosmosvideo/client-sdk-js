@@ -15,9 +15,9 @@ function _mergeNamespaces(n, m) {
 
 var e = Object.defineProperty;
 var h = (i, s, t) => s in i ? e(i, s, {
-  enumerable: !0,
-  configurable: !0,
-  writable: !0,
+  enumerable: true,
+  configurable: true,
+  writable: true,
   value: t
 }) : i[s] = t;
 var o = (i, s, t) => h(i, typeof s != "symbol" ? s + "" : s, t);
@@ -64,10 +64,10 @@ function assert(condition, msg) {
   }
 }
 const FLOAT32_MAX = 3.4028234663852886e38,
-  FLOAT32_MIN = -3.4028234663852886e38,
+  FLOAT32_MIN = -34028234663852886e22,
   UINT32_MAX = 0xffffffff,
   INT32_MAX = 0x7fffffff,
-  INT32_MIN = -0x80000000;
+  INT32_MIN = -2147483648;
 /**
  * Assert a valid signed protobuf 32-bit integer.
  */
@@ -3772,10 +3772,13 @@ const EventMetric = /* @__PURE__ */proto3.makeMessageType("livekit.EventMetric",
 }]);
 const BackupCodecPolicy$1 = /* @__PURE__ */proto3.makeEnum("livekit.BackupCodecPolicy", [{
   no: 0,
-  name: "REGRESSION"
+  name: "PREFER_REGRESSION"
 }, {
   no: 1,
   name: "SIMULCAST"
+}, {
+  no: 2,
+  name: "REGRESSION"
 }]);
 const TrackType = /* @__PURE__ */proto3.makeEnum("livekit.TrackType", [{
   no: 0,
@@ -3881,6 +3884,9 @@ const DisconnectReason = /* @__PURE__ */proto3.makeEnum("livekit.DisconnectReaso
 }, {
   no: 13,
   name: "SIP_TRUNK_FAILURE"
+}, {
+  no: 14,
+  name: "CONNECTION_TIMEOUT"
 }]);
 const ReconnectReason = /* @__PURE__ */proto3.makeEnum("livekit.ReconnectReason", [{
   no: 0,
@@ -3926,6 +3932,9 @@ const AudioTrackFeature = /* @__PURE__ */proto3.makeEnum("livekit.AudioTrackFeat
 }, {
   no: 5,
   name: "TF_ENHANCED_NOISE_CANCELLATION"
+}, {
+  no: 6,
+  name: "TF_PRECONNECT_BUFFER"
 }]);
 const Room$1 = /* @__PURE__ */proto3.makeMessageType("livekit.Room", () => [{
   no: 1,
@@ -4169,6 +4178,12 @@ const ParticipantInfo = /* @__PURE__ */proto3.makeMessageType("livekit.Participa
   name: "disconnect_reason",
   kind: "enum",
   T: proto3.getEnumType(DisconnectReason)
+}, {
+  no: 18,
+  name: "kind_details",
+  kind: "enum",
+  T: proto3.getEnumType(ParticipantInfo_KindDetail),
+  repeated: true
 }]);
 const ParticipantInfo_State = /* @__PURE__ */proto3.makeEnum("livekit.ParticipantInfo.State", [{
   no: 0,
@@ -4198,6 +4213,13 @@ const ParticipantInfo_Kind = /* @__PURE__ */proto3.makeEnum("livekit.Participant
 }, {
   no: 4,
   name: "AGENT"
+}]);
+const ParticipantInfo_KindDetail = /* @__PURE__ */proto3.makeEnum("livekit.ParticipantInfo.KindDetail", [{
+  no: 0,
+  name: "CLOUD_AGENT"
+}, {
+  no: 1,
+  name: "FORWARDED"
 }]);
 const Encryption_Type = /* @__PURE__ */proto3.makeEnum("livekit.Encryption.Type", [{
   no: 0,
@@ -4913,6 +4935,9 @@ const ClientInfo_SDK = /* @__PURE__ */proto3.makeEnum("livekit.ClientInfo.SDK", 
 }, {
   no: 12,
   name: "NODE"
+}, {
+  no: 13,
+  name: "UNREAL"
 }]);
 const ClientConfiguration = /* @__PURE__ */proto3.makeMessageType("livekit.ClientConfiguration", () => [{
   no: 1,
@@ -5403,6 +5428,12 @@ const SignalResponse = /* @__PURE__ */proto3.makeMessageType("livekit.SignalResp
   kind: "message",
   T: TrackSubscribed,
   oneof: "message"
+}, {
+  no: 24,
+  name: "room_moved",
+  kind: "message",
+  T: RoomMovedResponse,
+  oneof: "message"
 }]);
 const SimulcastCodec = /* @__PURE__ */proto3.makeMessageType("livekit.SimulcastCodec", () => [{
   no: 1,
@@ -5509,6 +5540,12 @@ const AddTrackRequest = /* @__PURE__ */proto3.makeMessageType("livekit.AddTrackR
   name: "backup_codec_policy",
   kind: "enum",
   T: proto3.getEnumType(BackupCodecPolicy$1)
+}, {
+  no: 17,
+  name: "audio_features",
+  kind: "enum",
+  T: proto3.getEnumType(AudioTrackFeature),
+  repeated: true
 }]);
 const TrickleRequest = /* @__PURE__ */proto3.makeMessageType("livekit.TrickleRequest", () => [{
   no: 1,
@@ -6028,6 +6065,29 @@ const SubscriptionPermissionUpdate = /* @__PURE__ */proto3.makeMessageType("live
   kind: "scalar",
   T: 8
   /* ScalarType.BOOL */
+}]);
+const RoomMovedResponse = /* @__PURE__ */proto3.makeMessageType("livekit.RoomMovedResponse", () => [{
+  no: 1,
+  name: "room",
+  kind: "message",
+  T: Room$1
+}, {
+  no: 2,
+  name: "token",
+  kind: "scalar",
+  T: 9
+  /* ScalarType.STRING */
+}, {
+  no: 3,
+  name: "participant",
+  kind: "message",
+  T: ParticipantInfo
+}, {
+  no: 4,
+  name: "other_participants",
+  kind: "message",
+  T: ParticipantInfo,
+  repeated: true
 }]);
 const SyncState = /* @__PURE__ */proto3.makeMessageType("livekit.SyncState", () => [{
   no: 1,
@@ -7122,7 +7182,7 @@ let deprecationWarnings_ = true;
  */
 function extractVersion(uastring, expr, pos) {
   const match = uastring.match(expr);
-  return match && match.length >= pos && parseInt(match[pos], 10);
+  return match && match.length >= pos && parseFloat(match[pos], 10);
 }
 
 // Wraps the peerconnection event eventNameToWrap in a function
@@ -7267,19 +7327,21 @@ function detectBrowser(window) {
   if (navigator.mozGetUserMedia) {
     // Firefox.
     result.browser = 'firefox';
-    result.version = extractVersion(navigator.userAgent, /Firefox\/(\d+)\./, 1);
+    result.version = parseInt(extractVersion(navigator.userAgent, /Firefox\/(\d+)\./, 1));
   } else if (navigator.webkitGetUserMedia || window.isSecureContext === false && window.webkitRTCPeerConnection) {
     // Chrome, Chromium, Webview, Opera.
     // Version matches Chrome/WebRTC version.
     // Chrome 74 removed webkitGetUserMedia on http as well so we need the
     // more complicated fallback to webkitRTCPeerConnection.
     result.browser = 'chrome';
-    result.version = extractVersion(navigator.userAgent, /Chrom(e|ium)\/(\d+)\./, 2);
+    result.version = parseInt(extractVersion(navigator.userAgent, /Chrom(e|ium)\/(\d+)\./, 2));
   } else if (window.RTCPeerConnection && navigator.userAgent.match(/AppleWebKit\/(\d+)\./)) {
     // Safari.
     result.browser = 'safari';
-    result.version = extractVersion(navigator.userAgent, /AppleWebKit\/(\d+)\./, 1);
+    result.version = parseInt(extractVersion(navigator.userAgent, /AppleWebKit\/(\d+)\./, 1));
     result.supportsUnifiedPlan = window.RTCRtpTransceiver && 'currentDirection' in window.RTCRtpTransceiver.prototype;
+    // Only for internal usage.
+    result._safariVersion = extractVersion(navigator.userAgent, /Version\/(\d+(\.?\d+))/, 1);
   } else {
     // Default fallthrough: not supported.
     result.browser = 'Not a supported browser.';
@@ -9880,7 +9942,7 @@ function removeExtmapAllowMixed(window, browserDetails) {
   if (browserDetails.browser === 'chrome' && browserDetails.version >= 71) {
     return;
   }
-  if (browserDetails.browser === 'safari' && browserDetails.version >= 605) {
+  if (browserDetails.browser === 'safari' && browserDetails._safariVersion >= 13.1) {
     return;
   }
   const nativeSRD = window.RTCPeerConnection.prototype.setRemoteDescription;
@@ -10146,11 +10208,16 @@ const KEY_PROVIDER_DEFAULTS = {
 var KeyProviderEvent;
 (function (KeyProviderEvent) {
   KeyProviderEvent["SetKey"] = "setKey";
+  /** Event for requesting to ratchet the key used to encrypt the stream */
   KeyProviderEvent["RatchetRequest"] = "ratchetRequest";
+  /** Emitted when a key is ratcheted. Could be after auto-ratcheting on decryption failure or
+   *  following a `RatchetRequest`, will contain the ratcheted key material */
   KeyProviderEvent["KeyRatcheted"] = "keyRatcheted";
 })(KeyProviderEvent || (KeyProviderEvent = {}));
 var KeyHandlerEvent;
 (function (KeyHandlerEvent) {
+  /** Emitted when a key has been ratcheted. Is emitted when any key has been ratcheted
+   * i.e. when the FrameCryptor tried to ratchet when decryption is failing  */
   KeyHandlerEvent["KeyRatcheted"] = "keyRatcheted";
 })(KeyHandlerEvent || (KeyHandlerEvent = {}));
 var EncryptionEvent;
@@ -10319,14 +10386,18 @@ class BaseKeyProvider extends eventsExports.EventEmitter {
     let options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
     super();
     /**
-     * callback being invoked after a ratchet request has been performed on a participant
-     * that surfaces the new key material.
-     * @param material
+     * Callback being invoked after a key has been ratcheted.
+     * Can happen when:
+     * - A decryption failure occurs and the key is auto-ratcheted
+     * - A ratchet request is sent (see {@link ratchetKey()})
+     * @param ratchetResult Contains the ratcheted chain key (exportable to other participants) and the derived new key material.
+     * @param participantId
      * @param keyIndex
      */
-    this.onKeyRatcheted = (material, keyIndex) => {
+    this.onKeyRatcheted = (ratchetResult, participantId, keyIndex) => {
       livekitLogger.debug('key ratcheted event received', {
-        material,
+        ratchetResult,
+        participantId,
         keyIndex
       });
     };
@@ -10408,6 +10479,7 @@ var ConnectionErrorReason;
   ConnectionErrorReason[ConnectionErrorReason["InternalError"] = 2] = "InternalError";
   ConnectionErrorReason[ConnectionErrorReason["Cancelled"] = 3] = "Cancelled";
   ConnectionErrorReason[ConnectionErrorReason["LeaveRequest"] = 4] = "LeaveRequest";
+  ConnectionErrorReason[ConnectionErrorReason["Timeout"] = 5] = "Timeout";
 })(ConnectionErrorReason || (ConnectionErrorReason = {}));
 class ConnectionError extends LivekitError {
   constructor(message, reason, status, context) {
@@ -10453,6 +10525,13 @@ class PublishDataError extends LivekitError {
   constructor(message) {
     super(14, message !== null && message !== void 0 ? message : 'unable to publish data');
     this.name = 'PublishDataError';
+  }
+}
+class PublishTrackError extends LivekitError {
+  constructor(message, status) {
+    super(15, message);
+    this.name = 'PublishTrackError';
+    this.status = status;
   }
 }
 class SignalRequestError extends LivekitError {
@@ -10554,6 +10633,15 @@ var RoomEvent;
    * args: ([[ConnectionState]])
    */
   RoomEvent["ConnectionStateChanged"] = "connectionStateChanged";
+  /**
+   * When participant has been moved to a different room by the service request.
+   * The behavior looks like the participant has been disconnected and reconnected to a different room
+   * seamlessly without connection state transition.
+   * A new token will be provided for reconnecting to the new room if needed.
+   *
+   * args: ([[room: string, token: string]])
+   */
+  RoomEvent["Moved"] = "moved";
   /**
    * When input or output devices on the machine have changed.
    */
@@ -10678,6 +10766,12 @@ var RoomEvent;
    * args: (changedAttributes: [[Record<string, string]], participant: [[Participant]])
    */
   RoomEvent["ParticipantAttributesChanged"] = "participantAttributesChanged";
+  /**
+   * Emitted when the participant's state changes to ACTIVE and is ready to send/receive data messages
+   *
+   * args: (participant: [[Participant]])
+   */
+  RoomEvent["ParticipantActive"] = "participantActive";
   /**
    * Room metadata is a simple way for app-specific state to be pushed to
    * all users.
@@ -10976,6 +11070,10 @@ var ParticipantEvent;
   ParticipantEvent["LocalTrackSubscribed"] = "localTrackSubscribed";
   /** only emitted on local participant */
   ParticipantEvent["ChatMessage"] = "chatMessage";
+  /**
+   * Emitted when the participant's state changes to ACTIVE and is ready to send/receive data messages
+   */
+  ParticipantEvent["Active"] = "active";
 })(ParticipantEvent || (ParticipantEvent = {}));
 /** @internal */
 var EngineEvent;
@@ -11008,6 +11106,8 @@ var EngineEvent;
   EngineEvent["LocalTrackSubscribed"] = "localTrackSubscribed";
   EngineEvent["Offline"] = "offline";
   EngineEvent["SignalRequestResponse"] = "signalRequestResponse";
+  EngineEvent["SignalConnected"] = "signalConnected";
+  EngineEvent["RoomMoved"] = "roomMoved";
 })(EngineEvent || (EngineEvent = {}));
 var TrackEvent;
 (function (TrackEvent) {
@@ -11085,13 +11185,21 @@ var TrackEvent;
    * @experimental
    */
   TrackEvent["TimeSyncUpdate"] = "timeSyncUpdate";
+  /**
+   * @internal
+   */
+  TrackEvent["PreConnectBufferFlushed"] = "preConnectBufferFlushed";
 })(TrackEvent || (TrackEvent = {}));
 
 function cloneDeep(value) {
   if (typeof value === 'undefined') {
-    return;
+    return value;
   }
   if (typeof structuredClone === 'function') {
+    if (typeof value === 'object' && value !== null) {
+      // ensure that the value is not a proxy by spreading it
+      return structuredClone(Object.assign({}, value));
+    }
     return structuredClone(value);
   } else {
     return JSON.parse(JSON.stringify(value));
@@ -11166,10 +11274,10 @@ function getOSVersion(ua) {
   return ua.includes('mac os') ? getMatch(/\(.+?(\d+_\d+(:?_\d+)?)/, ua, 1).replace(/_/g, '.') : undefined;
 }
 
-var version$1 = "2.9.4";
+var version$1 = "2.13.3";
 
 const version = version$1;
-const protocolVersion = 15;
+const protocolVersion = 16;
 
 /**
  * Timers that can be overridden with platform specific implementations
@@ -11578,7 +11686,7 @@ function detachTrack(track, element) {
     }
   }
   Track.streamStateFromProto = streamStateFromProto;
-})(Track);
+})(Track || (Track = {}));
 
 class VideoPreset {
   constructor(widthOrOptions, height, maxBitrate, maxFramerate, priority) {
@@ -11620,8 +11728,12 @@ function isBackupCodec(codec) {
 }
 var BackupCodecPolicy;
 (function (BackupCodecPolicy) {
-  BackupCodecPolicy[BackupCodecPolicy["REGRESSION"] = 0] = "REGRESSION";
+  // codec regression is preferred, the sfu will try to regress codec if possible but not guaranteed
+  BackupCodecPolicy[BackupCodecPolicy["PREFER_REGRESSION"] = 0] = "PREFER_REGRESSION";
+  // multi-codec simulcast, publish both primary and backup codec at the same time
   BackupCodecPolicy[BackupCodecPolicy["SIMULCAST"] = 1] = "SIMULCAST";
+  // always use backup codec only
+  BackupCodecPolicy[BackupCodecPolicy["REGRESSION"] = 2] = "REGRESSION";
 })(BackupCodecPolicy || (BackupCodecPolicy = {}));
 var AudioPresets;
 (function (AudioPresets) {
@@ -11786,9 +11898,20 @@ function isSafari() {
   var _a;
   return ((_a = getBrowser()) === null || _a === void 0 ? void 0 : _a.name) === 'Safari';
 }
+function isSafariBased() {
+  const b = getBrowser();
+  return (b === null || b === void 0 ? void 0 : b.name) === 'Safari' || (b === null || b === void 0 ? void 0 : b.os) === 'iOS';
+}
 function isSafari17() {
   const b = getBrowser();
   return (b === null || b === void 0 ? void 0 : b.name) === 'Safari' && b.version.startsWith('17.');
+}
+function isSafariSvcApi(browser) {
+  if (!browser) {
+    browser = getBrowser();
+  }
+  // Safari 18.4 requires legacy svc api and scaleResolutionDown to be set
+  return (browser === null || browser === void 0 ? void 0 : browser.name) === 'Safari' && compareVersions(browser.version, '18.3') > 0;
 }
 function isMobile() {
   var _a, _b;
@@ -12183,8 +12306,8 @@ function splitUtf8(s, n) {
 }
 
 function mergeDefaultOptions(options, audioDefaults, videoDefaults) {
-  var _a, _b, _c;
-  var _d, _e;
+  var _a, _b;
+  var _c, _d;
   const {
     optionsWithoutProcessor,
     audioProcessor,
@@ -12192,20 +12315,24 @@ function mergeDefaultOptions(options, audioDefaults, videoDefaults) {
   } = extractProcessorsFromOptions(options !== null && options !== void 0 ? options : {});
   const defaultAudioProcessor = audioDefaults === null || audioDefaults === void 0 ? void 0 : audioDefaults.processor;
   const defaultVideoProcessor = videoDefaults === null || videoDefaults === void 0 ? void 0 : videoDefaults.processor;
-  const clonedOptions = (_a = cloneDeep(optionsWithoutProcessor)) !== null && _a !== void 0 ? _a : {};
+  const clonedOptions = optionsWithoutProcessor !== null && optionsWithoutProcessor !== void 0 ? optionsWithoutProcessor : {};
   if (clonedOptions.audio === true) clonedOptions.audio = {};
   if (clonedOptions.video === true) clonedOptions.video = {};
   // use defaults
   if (clonedOptions.audio) {
     mergeObjectWithoutOverwriting(clonedOptions.audio, audioDefaults);
-    (_b = (_d = clonedOptions.audio).deviceId) !== null && _b !== void 0 ? _b : _d.deviceId = 'default';
+    (_a = (_c = clonedOptions.audio).deviceId) !== null && _a !== void 0 ? _a : _c.deviceId = {
+      ideal: 'default'
+    };
     if (audioProcessor || defaultAudioProcessor) {
       clonedOptions.audio.processor = audioProcessor !== null && audioProcessor !== void 0 ? audioProcessor : defaultAudioProcessor;
     }
   }
   if (clonedOptions.video) {
     mergeObjectWithoutOverwriting(clonedOptions.video, videoDefaults);
-    (_c = (_e = clonedOptions.video).deviceId) !== null && _c !== void 0 ? _c : _e.deviceId = 'default';
+    (_b = (_d = clonedOptions.video).deviceId) !== null && _b !== void 0 ? _b : _d.deviceId = {
+      ideal: 'default'
+    };
     if (videoProcessor || defaultVideoProcessor) {
       clonedOptions.video.processor = videoProcessor !== null && videoProcessor !== void 0 ? videoProcessor : defaultVideoProcessor;
     }
@@ -12239,10 +12366,14 @@ function constraintsForOptions(options) {
         }
       });
       constraints.video = videoOptions;
-      (_a = (_c = constraints.video).deviceId) !== null && _a !== void 0 ? _a : _c.deviceId = 'default';
+      (_a = (_c = constraints.video).deviceId) !== null && _a !== void 0 ? _a : _c.deviceId = {
+        ideal: 'default'
+      };
     } else {
       constraints.video = options.video ? {
-        deviceId: 'default'
+        deviceId: {
+          ideal: 'default'
+        }
       } : false;
     }
   } else {
@@ -12251,10 +12382,14 @@ function constraintsForOptions(options) {
   if (options.audio) {
     if (typeof options.audio === 'object') {
       constraints.audio = options.audio;
-      (_b = (_d = constraints.audio).deviceId) !== null && _b !== void 0 ? _b : _d.deviceId = 'default';
+      (_b = (_d = constraints.audio).deviceId) !== null && _b !== void 0 ? _b : _d.deviceId = {
+        ideal: 'default'
+      };
     } else {
       constraints.audio = {
-        deviceId: 'default'
+        deviceId: {
+          ideal: 'default'
+        }
       };
     }
   } else {
@@ -12292,13 +12427,42 @@ function detectSilence(track_1) {
  * @internal
  */
 function getNewAudioContext() {
+  var _a;
   const AudioContext =
   // @ts-ignore
   typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
   if (AudioContext) {
-    return new AudioContext({
+    const audioContext = new AudioContext({
       latencyHint: 'interactive'
     });
+    // If the audio context is suspended, we need to resume it when the user clicks on the page
+    if (audioContext.state === 'suspended' && typeof window !== 'undefined' && ((_a = window.document) === null || _a === void 0 ? void 0 : _a.body)) {
+      const handleResume = () => __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        try {
+          if (audioContext.state === 'suspended') {
+            yield audioContext.resume();
+          }
+        } catch (e) {
+          console.warn('Error trying to auto-resume audio context', e);
+        }
+        (_a = window.document.body) === null || _a === void 0 ? void 0 : _a.removeEventListener('click', handleResume);
+      });
+      window.document.body.addEventListener('click', handleResume);
+    }
+    return audioContext;
+  }
+}
+/**
+ * @internal
+ */
+function kindToSource(kind) {
+  if (kind === 'audioinput') {
+    return Track.Source.Microphone;
+  } else if (kind === 'videoinput') {
+    return Track.Source.Camera;
+  } else {
+    return Track.Source.Unknown;
   }
 }
 /**
@@ -12436,8 +12600,22 @@ function extractProcessorsFromOptions(options) {
   return {
     audioProcessor,
     videoProcessor,
-    optionsWithoutProcessor: newOptions
+    optionsWithoutProcessor: cloneDeep(newOptions)
   };
+}
+function getTrackSourceFromProto(source) {
+  switch (source) {
+    case TrackSource.CAMERA:
+      return Track.Source.Camera;
+    case TrackSource.MICROPHONE:
+      return Track.Source.Microphone;
+    case TrackSource.SCREEN_SHARE:
+      return Track.Source.ScreenShare;
+    case TrackSource.SCREEN_SHARE_AUDIO:
+      return Track.Source.ScreenShareAudio;
+    default:
+      return Track.Source.Unknown;
+  }
 }
 
 /**
@@ -12482,7 +12660,7 @@ class E2EEManager extends eventsExports.EventEmitter {
           }
           break;
         case 'ratchetKey':
-          this.keyProvider.emit(KeyProviderEvent.KeyRatcheted, data.material, data.keyIndex);
+          this.keyProvider.emit(KeyProviderEvent.KeyRatcheted, data.ratchetResult, data.participantIdentity, data.keyIndex);
           break;
       }
     };
@@ -12828,7 +13006,9 @@ class DeviceManager {
             const permissionsToAcquire = {
               video: kind !== 'audioinput' && kind !== 'audiooutput',
               audio: kind !== 'videoinput' && {
-                deviceId: 'default'
+                deviceId: {
+                  ideal: 'default'
+                }
               }
             };
             const stream = yield navigator.mediaDevices.getUserMedia(permissionsToAcquire);
@@ -12914,6 +13094,25 @@ class AsyncQueue {
   snapshot() {
     return Array.from(this.pendingTasks.values());
   }
+}
+
+function createRtcUrl(url, searchParams) {
+  const urlObj = new URL(toWebsocketUrl(url));
+  searchParams.forEach((value, key) => {
+    urlObj.searchParams.set(key, value);
+  });
+  return appendUrlPath(urlObj, 'rtc');
+}
+function createValidateUrl(rtcWsUrl) {
+  const urlObj = new URL(toHttpUrl(rtcWsUrl));
+  return appendUrlPath(urlObj, 'validate');
+}
+function ensureTrailingSlash(path) {
+  return path.endsWith('/') ? path : "".concat(path, "/");
+}
+function appendUrlPath(urlObj, path) {
+  urlObj.pathname = "".concat(ensureTrailingSlash(urlObj.pathname)).concat(path);
+  return urlObj.toString();
 }
 
 const passThroughQueueSignals = ['syncState', 'trickle', 'offer', 'answer', 'simulate', 'leave'];
@@ -13013,12 +13212,10 @@ class SignalClient {
   }
   connect(url, token, opts, abortSignal) {
     this.connectOptions = opts;
-    url = toWebsocketUrl(url);
-    // strip trailing slash
-    url = url.replace(/\/$/, '');
-    url += '/rtc';
     const clientInfo = getClientInfo();
     const params = createConnectionParams(token, clientInfo, opts);
+    const rtcUrl = createRtcUrl(url, params);
+    const validateUrl = createValidateUrl(rtcUrl);
     return new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
       const unlock = yield this.connectionLock.lock();
       try {
@@ -13035,11 +13232,18 @@ class SignalClient {
           abortHandler();
         }
         abortSignal === null || abortSignal === void 0 ? void 0 : abortSignal.addEventListener('abort', abortHandler);
-        this.log.debug("connecting to ".concat(url + params.replace(/access_token=([^&#$]*)/, 'access_token=<redacted>')), this.logContext);
+        const redactedUrl = new URL(rtcUrl);
+        if (redactedUrl.searchParams.has('access_token')) {
+          redactedUrl.searchParams.set('access_token', '<redacted>');
+        }
+        this.log.debug("connecting to ".concat(redactedUrl), Object.assign({
+          reconnect: opts.reconnect,
+          reconnectReason: opts.reconnectReason
+        }, this.logContext));
         if (this.ws) {
           yield this.close(false);
         }
-        this.ws = new WebSocket(url + params);
+        this.ws = new WebSocket(rtcUrl);
         this.ws.binaryType = 'arraybuffer';
         this.ws.onopen = () => {
           clearTimeout(wsTimeout);
@@ -13049,12 +13253,12 @@ class SignalClient {
             this.state = SignalConnectionState.DISCONNECTED;
             clearTimeout(wsTimeout);
             try {
-              const resp = yield fetch("http".concat(url.substring(2), "/validate").concat(params));
+              const resp = yield fetch(validateUrl);
               if (resp.status.toFixed(0).startsWith('4')) {
                 const msg = yield resp.text();
                 reject(new ConnectionError(msg, ConnectionErrorReason.NotAllowed, resp.status));
               } else {
-                reject(new ConnectionError('Internal error', ConnectionErrorReason.InternalError, resp.status));
+                reject(new ConnectionError("Encountered unknown websocket error during connection: ".concat(ev.toString()), ConnectionErrorReason.InternalError, resp.status));
               }
             } catch (e) {
               reject(new ConnectionError(e instanceof Error ? e.message : 'server was not reachable', ConnectionErrorReason.ServerUnreachable));
@@ -13201,7 +13405,7 @@ class SignalClient {
     });
   }
   sendIceCandidate(candidate, target) {
-    this.log.trace('sending ice candidate', Object.assign(Object.assign({}, this.logContext), {
+    this.log.debug('sending ice candidate', Object.assign(Object.assign({}, this.logContext), {
       candidate
     }));
     return this.sendRequest({
@@ -13449,6 +13653,13 @@ class SignalClient {
       if (this.onLocalTrackSubscribed) {
         this.onLocalTrackSubscribed(msg.value.trackSid);
       }
+    } else if (msg.case === 'roomMoved') {
+      if (this.onTokenRefresh) {
+        this.onTokenRefresh(msg.value.token);
+      }
+      if (this.onRoomMoved) {
+        this.onRoomMoved(msg.value);
+      }
     } else {
       this.log.debug('unsupported message', Object.assign(Object.assign({}, this.logContext), {
         msgCase: msg.case
@@ -13591,7 +13802,7 @@ function createConnectionParams(token, info, opts) {
     // @ts-ignore
     params.set('network', navigator.connection.type);
   }
-  return "?".concat(params.toString());
+  return params;
 }
 
 var lib = {};
@@ -14895,17 +15106,22 @@ const publishDefaults = {
   screenShareEncoding: ScreenSharePresets.h1080fps15.encoding,
   stopMicTrackOnMute: false,
   videoCodec: defaultVideoCodec,
-  backupCodec: true
+  backupCodec: true,
+  preConnectBuffer: false
 };
 const audioDefaults = {
-  deviceId: 'default',
+  deviceId: {
+    ideal: 'default'
+  },
   autoGainControl: true,
   echoCancellation: true,
   noiseSuppression: true,
   voiceIsolation: true
 };
 const videoDefaults = {
-  deviceId: 'default',
+  deviceId: {
+    ideal: 'default'
+  },
   resolution: VideoPresets.h720.resolution
 };
 const roomOptionDefaults = {
@@ -15339,7 +15555,66 @@ function computeBitrate(currentStats, prevStats) {
   return (bytesNow - bytesPrev) * 8 * 1000 / (currentStats.timestamp - prevStats.timestamp);
 }
 
-const defaultDimensionsTimeout = 1000;
+// Check if MediaRecorder is available
+const isMediaRecorderAvailable = typeof MediaRecorder !== 'undefined';
+// Fallback class for environments without MediaRecorder
+class FallbackRecorder {
+  constructor() {
+    throw new Error('MediaRecorder is not available in this environment');
+  }
+}
+// Use conditional inheritance to avoid parse-time errors
+const RecorderBase = isMediaRecorderAvailable ? MediaRecorder : FallbackRecorder;
+class LocalTrackRecorder extends RecorderBase {
+  constructor(track, options) {
+    if (!isMediaRecorderAvailable) {
+      throw new Error('MediaRecorder is not available in this environment');
+    }
+    super(new MediaStream([track.mediaStreamTrack]), options);
+    let dataListener;
+    let streamController;
+    const isClosed = () => streamController === undefined;
+    const onStop = () => {
+      this.removeEventListener('dataavailable', dataListener);
+      this.removeEventListener('stop', onStop);
+      this.removeEventListener('error', onError);
+      streamController === null || streamController === void 0 ? void 0 : streamController.close();
+      streamController = undefined;
+    };
+    const onError = event => {
+      streamController === null || streamController === void 0 ? void 0 : streamController.error(event);
+      this.removeEventListener('dataavailable', dataListener);
+      this.removeEventListener('stop', onStop);
+      this.removeEventListener('error', onError);
+      streamController = undefined;
+    };
+    this.byteStream = new ReadableStream({
+      start: controller => {
+        streamController = controller;
+        dataListener = event => __awaiter(this, void 0, void 0, function* () {
+          const arrayBuffer = yield event.data.arrayBuffer();
+          if (isClosed()) {
+            return;
+          }
+          controller.enqueue(new Uint8Array(arrayBuffer));
+        });
+        this.addEventListener('dataavailable', dataListener);
+      },
+      cancel: () => {
+        onStop();
+      }
+    });
+    this.addEventListener('stop', onStop);
+    this.addEventListener('error', onError);
+  }
+}
+// Helper function to check if recording is supported
+function isRecordingSupported() {
+  return isMediaRecorderAvailable;
+}
+
+const DEFAULT_DIMENSIONS_TIMEOUT = 1000;
+const PRE_CONNECT_BUFFER_TIMEOUT = 10000;
 class LocalTrack extends Track {
   /** @internal */
   get sender() {
@@ -15351,6 +15626,9 @@ class LocalTrack extends Track {
   }
   get constraints() {
     return this._constraints;
+  }
+  get hasPreConnectBuffer() {
+    return !!this.localTrackRecorder;
   }
   /**
    *
@@ -15507,7 +15785,7 @@ class LocalTrack extends Track {
   waitForDimensions() {
     return __awaiter(this, arguments, void 0, function () {
       var _this = this;
-      let timeout = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : defaultDimensionsTimeout;
+      let timeout = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : DEFAULT_DIMENSIONS_TIMEOUT;
       return function* () {
         var _a;
         if (_this.kind === Track.Kind.Audio) {
@@ -15610,11 +15888,11 @@ class LocalTrack extends Track {
         if (!constraints) {
           constraints = this._constraints;
         }
-        const _a = this._constraints,
-          {
-            deviceId
-          } = _a,
-          otherConstraints = __rest(_a, ["deviceId"]);
+        const {
+            deviceId,
+            facingMode
+          } = constraints,
+          otherConstraints = __rest(constraints, ["deviceId", "facingMode"]);
         this.log.debug('restarting track with constraints', Object.assign(Object.assign({}, this.logContext), {
           constraints
         }));
@@ -15623,8 +15901,9 @@ class LocalTrack extends Track {
           video: false
         };
         if (this.kind === Track.Kind.Video) {
-          streamConstraints.video = deviceId ? {
-            deviceId
+          streamConstraints.video = deviceId || facingMode ? {
+            deviceId,
+            facingMode
           } : true;
         } else {
           streamConstraints.audio = deviceId ? {
@@ -15860,6 +16139,40 @@ class LocalTrack extends Track {
         _this4.emit(TrackEvent.TrackProcessorUpdate);
       }();
     });
+  }
+  /** @internal */
+  startPreConnectBuffer() {
+    let timeslice = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 100;
+    if (!isRecordingSupported()) {
+      this.log.warn('MediaRecorder is not available, cannot start preconnect buffer', this.logContext);
+      return;
+    }
+    if (!this.localTrackRecorder) {
+      this.localTrackRecorder = new LocalTrackRecorder(this, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+    } else {
+      this.log.warn('preconnect buffer already started');
+      return;
+    }
+    this.localTrackRecorder.start(timeslice);
+    this.autoStopPreConnectBuffer = setTimeout(() => {
+      this.log.warn('preconnect buffer timed out, stopping recording automatically', this.logContext);
+      this.stopPreConnectBuffer();
+    }, PRE_CONNECT_BUFFER_TIMEOUT);
+  }
+  /** @internal */
+  stopPreConnectBuffer() {
+    clearTimeout(this.autoStopPreConnectBuffer);
+    if (this.localTrackRecorder) {
+      this.localTrackRecorder.stop();
+      this.localTrackRecorder = undefined;
+    }
+  }
+  /** @internal */
+  getPreConnectBuffer() {
+    var _a;
+    return (_a = this.localTrackRecorder) === null || _a === void 0 ? void 0 : _a.byteStream;
   }
 }
 
@@ -16173,12 +16486,15 @@ function computeVideoEncodings(isScreenShare, width, height, options) {
     // TODO: when we upstream libwebrtc, this will need additional verification
     isReactNative() || (browser === null || browser === void 0 ? void 0 : browser.name) === 'Chrome' && compareVersions(browser === null || browser === void 0 ? void 0 : browser.version, '113') < 0) {
       const bitratesRatio = sm.suffix == 'h' ? 2 : 3;
+      // safari 18.4 uses a different svc API that requires scaleResolutionDownBy to be set.
+      const requireScale = isSafariSvcApi(browser);
       for (let i = 0; i < sm.spatial; i += 1) {
         // in legacy SVC, scaleResolutionDownBy cannot be set
         encodings.push({
           rid: videoRids[2 - i],
           maxBitrate: videoEncoding.maxBitrate / Math.pow(bitratesRatio, i),
-          maxFramerate: original.encoding.maxFramerate
+          maxFramerate: original.encoding.maxFramerate,
+          scaleResolutionDownBy: requireScale ? Math.pow(2, i) : undefined
         });
       }
       // legacy SVC, scalabilityMode is set only on the first encoding
@@ -16685,7 +17001,7 @@ class LocalVideoTrack extends LocalTrack {
       }));
     }
     this.log.debug("setting publishing quality. max quality ".concat(maxQuality), this.logContext);
-    this.setPublishingLayers(qualities);
+    this.setPublishingLayers(isSVCCodec(this.codec), qualities);
   }
   restartTrack(options) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -16820,7 +17136,7 @@ class LocalVideoTrack extends LocalTrack {
       }));
       // only enable simulcast codec for preference codec setted
       if (!this.codec && codecs.length > 0) {
-        yield this.setPublishingLayers(codecs[0].qualities);
+        yield this.setPublishingLayers(isSVCCodec(codecs[0].codec), codecs[0].qualities);
         return [];
       }
       this.subscribedCodecs = codecs;
@@ -16831,7 +17147,7 @@ class LocalVideoTrack extends LocalTrack {
           _a = false;
           const codec = _d;
           if (!this.codec || this.codec === codec.codec) {
-            yield this.setPublishingLayers(codec.qualities);
+            yield this.setPublishingLayers(isSVCCodec(codec.codec), codec.qualities);
           } else {
             const simulcastCodecInfo = this.simulcastCodecs.get(codec.codec);
             this.log.debug("try setPublishingCodec for ".concat(codec.codec), Object.assign(Object.assign({}, this.logContext), {
@@ -16846,7 +17162,7 @@ class LocalVideoTrack extends LocalTrack {
               }
             } else if (simulcastCodecInfo.encodings) {
               this.log.debug("try setPublishingLayersForSender ".concat(codec.codec), this.logContext);
-              yield setPublishingLayersForSender(simulcastCodecInfo.sender, simulcastCodecInfo.encodings, codec.qualities, this.senderLock, this.log, this.logContext);
+              yield setPublishingLayersForSender(simulcastCodecInfo.sender, simulcastCodecInfo.encodings, codec.qualities, this.senderLock, isSVCCodec(codec.codec), this.log, this.logContext);
             }
           }
         }
@@ -16868,7 +17184,7 @@ class LocalVideoTrack extends LocalTrack {
    * @internal
    * Sets layers that should be publishing
    */
-  setPublishingLayers(qualities) {
+  setPublishingLayers(isSvc, qualities) {
     return __awaiter(this, void 0, void 0, function* () {
       this.log.debug('setting publishing layers', Object.assign(Object.assign({}, this.logContext), {
         qualities
@@ -16876,7 +17192,7 @@ class LocalVideoTrack extends LocalTrack {
       if (!this.sender || !this.encodings) {
         return;
       }
-      yield setPublishingLayersForSender(this.sender, this.encodings, qualities, this.senderLock, this.log, this.logContext);
+      yield setPublishingLayersForSender(this.sender, this.encodings, qualities, this.senderLock, isSvc, this.log, this.logContext);
     });
   }
   handleAppVisibilityChanged() {
@@ -16894,7 +17210,7 @@ class LocalVideoTrack extends LocalTrack {
     });
   }
 }
-function setPublishingLayersForSender(sender, senderEncodings, qualities, senderLock, log, logContext) {
+function setPublishingLayersForSender(sender, senderEncodings, qualities, senderLock, isSVC, log, logContext) {
   return __awaiter(this, void 0, void 0, function* () {
     const unlock = yield senderLock.lock();
     log.debug('setPublishingLayersForSender', Object.assign(Object.assign({}, logContext), {
@@ -16918,13 +17234,50 @@ function setPublishingLayersForSender(sender, senderEncodings, qualities, sender
         return;
       }
       let hasChanged = false;
-      /* disable closable spatial layer as it has video blur / frozen issue with current server / client
-      1. chrome 113: when switching to up layer with scalability Mode change, it will generate a
-            low resolution frame and recover very quickly, but noticable
-      2. livekit sfu: additional pli request cause video frozen for a few frames, also noticable */
-      const closableSpatial = false;
+      const browser = getBrowser();
+      const closableSpatial = (browser === null || browser === void 0 ? void 0 : browser.name) === 'Chrome' && compareVersions(browser === null || browser === void 0 ? void 0 : browser.version, '133') > 0;
       /* @ts-ignore */
-      if (closableSpatial && encodings[0].scalabilityMode) ; else {
+      if (closableSpatial && encodings[0].scalabilityMode) {
+        // svc dynacast encodings
+        const encoding = encodings[0];
+        /* @ts-ignore */
+        const mode = new ScalabilityMode(encoding.scalabilityMode);
+        let maxQuality = VideoQuality$1.OFF;
+        qualities.forEach(q => {
+          if (q.enabled && (maxQuality === VideoQuality$1.OFF || q.quality > maxQuality)) {
+            maxQuality = q.quality;
+          }
+        });
+        if (maxQuality === VideoQuality$1.OFF) {
+          if (encoding.active) {
+            encoding.active = false;
+            hasChanged = true;
+          }
+        } else if (!encoding.active || mode.spatial !== maxQuality + 1) {
+          hasChanged = true;
+          encoding.active = true;
+          /* @ts-ignore */
+          const originalMode = new ScalabilityMode(senderEncodings[0].scalabilityMode);
+          mode.spatial = maxQuality + 1;
+          mode.suffix = originalMode.suffix;
+          if (mode.spatial === 1) {
+            // no suffix for L1Tx
+            mode.suffix = undefined;
+          }
+          /* @ts-ignore */
+          encoding.scalabilityMode = mode.toString();
+          encoding.scaleResolutionDownBy = Math.pow(2, 2 - maxQuality);
+          if (senderEncodings[0].maxBitrate) {
+            encoding.maxBitrate = senderEncodings[0].maxBitrate / (encoding.scaleResolutionDownBy * encoding.scaleResolutionDownBy);
+          }
+        }
+      } else {
+        if (isSVC) {
+          const hasEnabledEncoding = qualities.some(q => q.enabled);
+          if (hasEnabledEncoding) {
+            qualities.forEach(q => q.enabled = true);
+          }
+        }
         // simulcast dynacast encodings
         encodings.forEach((encoding, idx) => {
           var _a;
@@ -17238,12 +17591,12 @@ class RTCEngine extends eventsExports.EventEmitter {
   }
   /** @internal */
   get logContext() {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f;
     return {
       room: (_b = (_a = this.latestJoinResponse) === null || _a === void 0 ? void 0 : _a.room) === null || _b === void 0 ? void 0 : _b.name,
       roomID: (_d = (_c = this.latestJoinResponse) === null || _c === void 0 ? void 0 : _c.room) === null || _d === void 0 ? void 0 : _d.sid,
       participant: (_f = (_e = this.latestJoinResponse) === null || _e === void 0 ? void 0 : _e.participant) === null || _f === void 0 ? void 0 : _f.identity,
-      pID: (_h = (_g = this.latestJoinResponse) === null || _g === void 0 ? void 0 : _g.participant) === null || _h === void 0 ? void 0 : _h.sid
+      pID: this.participantSid
     };
   }
   join(url, token, opts, abortSignal) {
@@ -17267,6 +17620,7 @@ class RTCEngine extends eventsExports.EventEmitter {
           this.negotiate();
         }
         this.clientConfiguration = joinResponse.clientConfiguration;
+        this.emit(EngineEvent.SignalConnected, joinResponse);
         return joinResponse;
       } catch (e) {
         if (e instanceof ConnectionError) {
@@ -17340,7 +17694,7 @@ class RTCEngine extends eventsExports.EventEmitter {
     return new Promise((resolve, reject) => {
       const publicationTimeout = setTimeout(() => {
         delete this.pendingTrackResolvers[req.cid];
-        reject(new ConnectionError('publication of local track timed out, no response from server', ConnectionErrorReason.InternalError));
+        reject(new ConnectionError('publication of local track timed out, no response from server', ConnectionErrorReason.Timeout));
       }, 10000);
       this.pendingTrackResolvers[req.cid] = {
         resolve: info => {
@@ -17466,7 +17820,7 @@ class RTCEngine extends eventsExports.EventEmitter {
       if (!this.pcManager) {
         return;
       }
-      this.log.trace('got ICE candidate from peer', Object.assign(Object.assign({}, this.logContext), {
+      this.log.debug('got ICE candidate from peer', Object.assign(Object.assign({}, this.logContext), {
         candidate,
         target
       }));
@@ -17512,6 +17866,14 @@ class RTCEngine extends eventsExports.EventEmitter {
     };
     this.client.onSubscribedQualityUpdate = update => {
       this.emit(EngineEvent.SubscribedQualityUpdate, update);
+    };
+    this.client.onRoomMoved = res => {
+      var _a;
+      this.participantSid = (_a = res.participant) === null || _a === void 0 ? void 0 : _a.sid;
+      if (this.latestJoinResponse) {
+        this.latestJoinResponse.room = res.room;
+      }
+      this.emit(EngineEvent.RoomMoved, res);
     };
     this.client.onClose = () => {
       this.handleDisconnect('signal', ReconnectReason.RR_SIGNAL_DISCONNECTED);
@@ -17588,8 +17950,7 @@ class RTCEngine extends eventsExports.EventEmitter {
     }
     // create data channels
     this.lossyDC = this.pcManager.createPublisherDataChannel(lossyDataChannel, {
-      // will drop older packets that arrive
-      ordered: true,
+      ordered: false,
       maxRetransmits: 0
     });
     this.reliableDC = this.pcManager.createPublisherDataChannel(reliableDataChannel, {
@@ -18460,6 +18821,7 @@ class BaseStreamWriter {
   }
 }
 class TextStreamWriter extends BaseStreamWriter {}
+class ByteStreamWriter extends BaseStreamWriter {}
 
 class RemoteTrack extends Track {
   constructor(mediaTrack, sid, kind, receiver, loggerOptions) {
@@ -18665,8 +19027,9 @@ class RemoteAudioTrack extends RemoteTrack {
       super.attach(element);
     }
     if (this.sinkId && supportsSetSinkId(element)) {
-      /* @ts-ignore */
-      element.setSinkId(this.sinkId);
+      element.setSinkId(this.sinkId).catch(e => {
+        this.log.error('Failed to set sink id on remote audio track', e, this.logContext);
+      });
     }
     if (this.audioContext && needsNewWebAudioConnection) {
       this.log.debug('using audio context mapping', this.logContext);
@@ -19213,7 +19576,7 @@ class TrackPublication extends eventsExports.EventEmitter {
     PermissionStatus["Allowed"] = "allowed";
     PermissionStatus["NotAllowed"] = "not_allowed";
   })(TrackPublication.PermissionStatus || (TrackPublication.PermissionStatus = {}));
-})(TrackPublication);
+})(TrackPublication || (TrackPublication = {}));
 
 class LocalTrackPublication extends TrackPublication {
   get isUpstreamPaused() {
@@ -19320,6 +19683,183 @@ class LocalTrackPublication extends TrackPublication {
   }
 }
 
+/**
+ * Creates a local video and audio track at the same time. When acquiring both
+ * audio and video tracks together, it'll display a single permission prompt to
+ * the user instead of two separate ones.
+ * @param options
+ */
+function createLocalTracks(options, loggerOptions) {
+  return __awaiter(this, void 0, void 0, function* () {
+    options !== null && options !== void 0 ? options : options = {};
+    let attemptExactMatch = false;
+    const {
+      audioProcessor,
+      videoProcessor,
+      optionsWithoutProcessor: internalOptions
+    } = extractProcessorsFromOptions(options);
+    let retryAudioOptions = internalOptions.audio;
+    let retryVideoOptions = internalOptions.video;
+    if (audioProcessor && typeof internalOptions.audio === 'object') {
+      internalOptions.audio.processor = audioProcessor;
+    }
+    if (videoProcessor && typeof internalOptions.video === 'object') {
+      internalOptions.video.processor = videoProcessor;
+    }
+    // if the user passes a device id as a string, we default to exact match
+    if (options.audio && typeof internalOptions.audio === 'object' && typeof internalOptions.audio.deviceId === 'string') {
+      const deviceId = internalOptions.audio.deviceId;
+      internalOptions.audio.deviceId = {
+        exact: deviceId
+      };
+      attemptExactMatch = true;
+      retryAudioOptions = Object.assign(Object.assign({}, internalOptions.audio), {
+        deviceId: {
+          ideal: deviceId
+        }
+      });
+    }
+    if (internalOptions.video && typeof internalOptions.video === 'object' && typeof internalOptions.video.deviceId === 'string') {
+      const deviceId = internalOptions.video.deviceId;
+      internalOptions.video.deviceId = {
+        exact: deviceId
+      };
+      attemptExactMatch = true;
+      retryVideoOptions = Object.assign(Object.assign({}, internalOptions.video), {
+        deviceId: {
+          ideal: deviceId
+        }
+      });
+    }
+    if (internalOptions.audio === true || typeof internalOptions.audio === 'object' && !internalOptions.audio.deviceId) {
+      internalOptions.audio = {
+        deviceId: 'default'
+      };
+    }
+    if (internalOptions.video === true) {
+      internalOptions.video = {
+        deviceId: 'default'
+      };
+    } else if (typeof internalOptions.video === 'object' && !internalOptions.video.deviceId) {
+      internalOptions.video.deviceId = 'default';
+    }
+    const opts = mergeDefaultOptions(internalOptions, audioDefaults, videoDefaults);
+    const constraints = constraintsForOptions(opts);
+    // Keep a reference to the promise on DeviceManager and await it in getLocalDevices()
+    // works around iOS Safari Bug https://bugs.webkit.org/show_bug.cgi?id=179363
+    const mediaPromise = navigator.mediaDevices.getUserMedia(constraints);
+    if (internalOptions.audio) {
+      DeviceManager.userMediaPromiseMap.set('audioinput', mediaPromise);
+      mediaPromise.catch(() => DeviceManager.userMediaPromiseMap.delete('audioinput'));
+    }
+    if (internalOptions.video) {
+      DeviceManager.userMediaPromiseMap.set('videoinput', mediaPromise);
+      mediaPromise.catch(() => DeviceManager.userMediaPromiseMap.delete('videoinput'));
+    }
+    try {
+      const stream = yield mediaPromise;
+      return yield Promise.all(stream.getTracks().map(mediaStreamTrack => __awaiter(this, void 0, void 0, function* () {
+        const isAudio = mediaStreamTrack.kind === 'audio';
+        let trackOptions = isAudio ? opts.audio : opts.video;
+        if (typeof trackOptions === 'boolean' || !trackOptions) {
+          trackOptions = {};
+        }
+        let trackConstraints;
+        const conOrBool = isAudio ? constraints.audio : constraints.video;
+        if (typeof conOrBool !== 'boolean') {
+          trackConstraints = conOrBool;
+        }
+        // update the constraints with the device id the user gave permissions to in the permission prompt
+        // otherwise each track restart (e.g. mute - unmute) will try to initialize the device again -> causing additional permission prompts
+        const newDeviceId = mediaStreamTrack.getSettings().deviceId;
+        if ((trackConstraints === null || trackConstraints === void 0 ? void 0 : trackConstraints.deviceId) && unwrapConstraint(trackConstraints.deviceId) !== newDeviceId) {
+          trackConstraints.deviceId = newDeviceId;
+        } else if (!trackConstraints) {
+          trackConstraints = {
+            deviceId: newDeviceId
+          };
+        }
+        const track = mediaTrackToLocalTrack(mediaStreamTrack, trackConstraints, loggerOptions);
+        if (track.kind === Track.Kind.Video) {
+          track.source = Track.Source.Camera;
+        } else if (track.kind === Track.Kind.Audio) {
+          track.source = Track.Source.Microphone;
+        }
+        track.mediaStream = stream;
+        if (isAudioTrack(track) && audioProcessor) {
+          yield track.setProcessor(audioProcessor);
+        } else if (isVideoTrack(track) && videoProcessor) {
+          yield track.setProcessor(videoProcessor);
+        }
+        return track;
+      })));
+    } catch (e) {
+      if (!attemptExactMatch) {
+        throw e;
+      }
+      return createLocalTracks(Object.assign(Object.assign({}, options), {
+        audio: retryAudioOptions,
+        video: retryVideoOptions
+      }), loggerOptions);
+    }
+  });
+}
+/**
+ * Creates a [[LocalVideoTrack]] with getUserMedia()
+ * @param options
+ */
+function createLocalVideoTrack(options) {
+  return __awaiter(this, void 0, void 0, function* () {
+    const tracks = yield createLocalTracks({
+      audio: false,
+      video: options !== null && options !== void 0 ? options : true
+    });
+    return tracks[0];
+  });
+}
+function createLocalAudioTrack(options) {
+  return __awaiter(this, void 0, void 0, function* () {
+    const tracks = yield createLocalTracks({
+      audio: options !== null && options !== void 0 ? options : true,
+      video: false
+    });
+    return tracks[0];
+  });
+}
+/**
+ * Creates a screen capture tracks with getDisplayMedia().
+ * A LocalVideoTrack is always created and returned.
+ * If { audio: true }, and the browser supports audio capture, a LocalAudioTrack is also created.
+ */
+function createLocalScreenTracks(options) {
+  return __awaiter(this, void 0, void 0, function* () {
+    if (options === undefined) {
+      options = {};
+    }
+    if (options.resolution === undefined && !isSafari17()) {
+      options.resolution = ScreenSharePresets.h1080fps30.resolution;
+    }
+    if (navigator.mediaDevices.getDisplayMedia === undefined) {
+      throw new DeviceUnsupportedError('getDisplayMedia not supported');
+    }
+    const constraints = screenCaptureToDisplayMediaStreamOptions(options);
+    const stream = yield navigator.mediaDevices.getDisplayMedia(constraints);
+    const tracks = stream.getVideoTracks();
+    if (tracks.length === 0) {
+      throw new TrackInvalidError('no video track found');
+    }
+    const screenVideo = new LocalVideoTrack(tracks[0], undefined, false);
+    screenVideo.source = Track.Source.ScreenShare;
+    const localTracks = [screenVideo];
+    if (stream.getAudioTracks().length > 0) {
+      const screenAudio = new LocalAudioTrack(stream.getAudioTracks()[0], undefined, false);
+      screenAudio.source = Track.Source.ScreenShareAudio;
+      localTracks.push(screenAudio);
+    }
+    return localTracks;
+  });
+}
+
 var ConnectionQuality;
 (function (ConnectionQuality) {
   ConnectionQuality["Excellent"] = "excellent";
@@ -19357,6 +19897,10 @@ class Participant extends eventsExports.EventEmitter {
   get isAgent() {
     var _a;
     return ((_a = this.permissions) === null || _a === void 0 ? void 0 : _a.agent) || this.kind === ParticipantInfo_Kind.AGENT;
+  }
+  get isActive() {
+    var _a;
+    return ((_a = this.participantInfo) === null || _a === void 0 ? void 0 : _a.state) === ParticipantInfo_State.ACTIVE;
   }
   get kind() {
     return this._kind;
@@ -19413,6 +19957,25 @@ class Participant extends eventsExports.EventEmitter {
       }
     }
   }
+  /**
+   * Waits until the participant is active and ready to receive data messages
+   * @returns a promise that resolves when the participant is active
+   */
+  waitUntilActive() {
+    if (this.isActive) {
+      return Promise.resolve();
+    }
+    if (this.activeFuture) {
+      return this.activeFuture.promise;
+    }
+    this.activeFuture = new Future();
+    this.once(ParticipantEvent.Active, () => {
+      var _a, _b;
+      (_b = (_a = this.activeFuture) === null || _a === void 0 ? void 0 : _a.resolve) === null || _b === void 0 ? void 0 : _b.call(_a);
+      this.activeFuture = undefined;
+    });
+    return this.activeFuture.promise;
+  }
   get connectionQuality() {
     return this._connectionQuality;
   }
@@ -19442,6 +20005,7 @@ class Participant extends eventsExports.EventEmitter {
   }
   /** @internal */
   updateInfo(info) {
+    var _a;
     // it's possible the update could be applied out of order due to await
     // during reconnect sequences. when that happens, it's possible for server
     // to have sent more recent version of participant info while JS is waiting
@@ -19456,14 +20020,14 @@ class Participant extends eventsExports.EventEmitter {
     this._setName(info.name);
     this._setMetadata(info.metadata);
     this._setAttributes(info.attributes);
+    if (info.state === ParticipantInfo_State.ACTIVE && ((_a = this.participantInfo) === null || _a === void 0 ? void 0 : _a.state) !== ParticipantInfo_State.ACTIVE) {
+      this.emit(ParticipantEvent.Active);
+    }
     if (info.permission) {
       this.setPermissions(info.permission);
     }
     // set this last so setMetadata can detect changes
     this.participantInfo = info;
-    this.log.trace('update participant info', Object.assign(Object.assign({}, this.logContext), {
-      info
-    }));
     return true;
   }
   /**
@@ -19525,6 +20089,16 @@ class Participant extends eventsExports.EventEmitter {
     this._connectionQuality = qualityFromProto(q);
     if (prevQuality !== this._connectionQuality) {
       this.emit(ParticipantEvent.ConnectionQualityChanged, this._connectionQuality);
+    }
+  }
+  /**
+   * @internal
+   */
+  setDisconnected() {
+    var _a, _b;
+    if (this.activeFuture) {
+      (_b = (_a = this.activeFuture).reject) === null || _b === void 0 ? void 0 : _b.call(_a, new Error('Participant disconnected'));
+      this.activeFuture = undefined;
     }
   }
   /**
@@ -19599,12 +20173,29 @@ class LocalParticipant extends Participant {
       this.updateTrackSubscriptionPermissions();
     };
     this.handleDisconnected = () => {
-      var _a, _b;
+      var _a, _b, _c, _d, _e, _f;
       if (this.reconnectFuture) {
         this.reconnectFuture.promise.catch(e => this.log.warn(e.message, this.logContext));
         (_b = (_a = this.reconnectFuture) === null || _a === void 0 ? void 0 : _a.reject) === null || _b === void 0 ? void 0 : _b.call(_a, 'Got disconnected during reconnection attempt');
         this.reconnectFuture = undefined;
       }
+      if (this.signalConnectedFuture) {
+        (_d = (_c = this.signalConnectedFuture).reject) === null || _d === void 0 ? void 0 : _d.call(_c, 'Got disconnected without signal connected');
+        this.signalConnectedFuture = undefined;
+      }
+      (_f = (_e = this.activeAgentFuture) === null || _e === void 0 ? void 0 : _e.reject) === null || _f === void 0 ? void 0 : _f.call(_e, 'Got disconnected without active agent present');
+      this.activeAgentFuture = undefined;
+      this.firstActiveAgent = undefined;
+    };
+    this.handleSignalConnected = joinResponse => {
+      var _a, _b;
+      if (joinResponse.participant) {
+        this.updateInfo(joinResponse.participant);
+      }
+      if (!this.signalConnectedFuture) {
+        this.signalConnectedFuture = new Future();
+      }
+      (_b = (_a = this.signalConnectedFuture).resolve) === null || _b === void 0 ? void 0 : _b.call(_a);
     };
     this.handleSignalRequestResponse = response => {
       const {
@@ -19680,7 +20271,7 @@ class LocalParticipant extends Participant {
     };
     this.handleSubscribedQualityUpdate = update => __awaiter(this, void 0, void 0, function* () {
       var _a, e_1, _b, _c;
-      var _d, _e;
+      var _d;
       if (!((_d = this.roomOptions) === null || _d === void 0 ? void 0 : _d.dynacast)) {
         return;
       }
@@ -19691,34 +20282,30 @@ class LocalParticipant extends Participant {
         }));
         return;
       }
-      if (update.subscribedCodecs.length > 0) {
-        if (!pub.videoTrack) {
-          return;
+      if (!pub.videoTrack) {
+        return;
+      }
+      const newCodecs = yield pub.videoTrack.setPublishingCodecs(update.subscribedCodecs);
+      try {
+        for (var _e = true, newCodecs_1 = __asyncValues(newCodecs), newCodecs_1_1; newCodecs_1_1 = yield newCodecs_1.next(), _a = newCodecs_1_1.done, !_a; _e = true) {
+          _c = newCodecs_1_1.value;
+          _e = false;
+          const codec = _c;
+          if (isBackupCodec(codec)) {
+            this.log.debug("publish ".concat(codec, " for ").concat(pub.videoTrack.sid), Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(pub)));
+            yield this.publishAdditionalCodecForTrack(pub.videoTrack, codec, pub.options);
+          }
         }
-        const newCodecs = yield pub.videoTrack.setPublishingCodecs(update.subscribedCodecs);
+      } catch (e_1_1) {
+        e_1 = {
+          error: e_1_1
+        };
+      } finally {
         try {
-          for (var _f = true, newCodecs_1 = __asyncValues(newCodecs), newCodecs_1_1; newCodecs_1_1 = yield newCodecs_1.next(), _a = newCodecs_1_1.done, !_a; _f = true) {
-            _c = newCodecs_1_1.value;
-            _f = false;
-            const codec = _c;
-            if (isBackupCodec(codec)) {
-              this.log.debug("publish ".concat(codec, " for ").concat(pub.videoTrack.sid), Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(pub)));
-              yield this.publishAdditionalCodecForTrack(pub.videoTrack, codec, pub.options);
-            }
-          }
-        } catch (e_1_1) {
-          e_1 = {
-            error: e_1_1
-          };
+          if (!_e && !_a && (_b = newCodecs_1.return)) yield _b.call(newCodecs_1);
         } finally {
-          try {
-            if (!_f && !_a && (_b = newCodecs_1.return)) yield _b.call(newCodecs_1);
-          } finally {
-            if (e_1) throw e_1.error;
-          }
+          if (e_1) throw e_1.error;
         }
-      } else if (update.subscribedQualities.length > 0) {
-        yield (_e = pub.videoTrack) === null || _e === void 0 ? void 0 : _e.setPublishingLayers(update.subscribedQualities);
       }
     });
     this.handleLocalTrackUnpublished = unpublished => {
@@ -19827,7 +20414,8 @@ class LocalParticipant extends Participant {
         pub.unmute();
       }
     });
-    this.engine.on(EngineEvent.Connected, this.handleReconnected).on(EngineEvent.SignalRestarted, this.handleReconnected).on(EngineEvent.SignalResumed, this.handleReconnected).on(EngineEvent.Restarting, this.handleReconnecting).on(EngineEvent.Resuming, this.handleReconnecting).on(EngineEvent.LocalTrackUnpublished, this.handleLocalTrackUnpublished).on(EngineEvent.SubscribedQualityUpdate, this.handleSubscribedQualityUpdate).on(EngineEvent.Disconnected, this.handleDisconnected).on(EngineEvent.SignalRequestResponse, this.handleSignalRequestResponse).on(EngineEvent.DataPacketReceived, this.handleDataPacket);
+    this.engine.on(EngineEvent.Connected, this.handleReconnected).on(EngineEvent.SignalConnected, this.handleSignalConnected).on(EngineEvent.SignalRestarted, this.handleReconnected).on(EngineEvent.SignalResumed, this.handleReconnected).on(EngineEvent.Restarting, this.handleReconnecting).on(EngineEvent.Resuming, this.handleReconnecting).on(EngineEvent.LocalTrackUnpublished, this.handleLocalTrackUnpublished).on(EngineEvent.SubscribedQualityUpdate, this.handleSubscribedQualityUpdate).on(EngineEvent.Disconnected, this.handleDisconnected).on(EngineEvent.SignalRequestResponse, this.handleSignalRequestResponse).on(EngineEvent.DataPacketReceived, this.handleDataPacket);
+    this.signalConnectedFuture = undefined;
   }
   /**
    * Sets and updates the metadata of the local participant.
@@ -20005,10 +20593,16 @@ class LocalParticipant extends Participant {
               tr.stop();
             });
             if (e instanceof Error) {
-              this.emit(ParticipantEvent.MediaDevicesError, e);
+              this.emit(ParticipantEvent.MediaDevicesError, e, sourceToKind(source));
             }
             this.pendingPublishing.delete(source);
             throw e;
+          }
+          for (const localTrack of localTracks) {
+            if (source === Track.Source.Microphone && isAudioTrack(localTrack) && (publishOptions === null || publishOptions === void 0 ? void 0 : publishOptions.preConnectBuffer)) {
+              this.log.info('starting preconnect buffer for microphone', Object.assign({}, this.logContext));
+              localTrack.startPreConnectBuffer();
+            }
           }
           try {
             const publishPromises = [];
@@ -20089,58 +20683,36 @@ class LocalParticipant extends Participant {
       var _a, _b;
       options !== null && options !== void 0 ? options : options = {};
       const mergedOptionsWithProcessors = mergeDefaultOptions(options, (_a = this.roomOptions) === null || _a === void 0 ? void 0 : _a.audioCaptureDefaults, (_b = this.roomOptions) === null || _b === void 0 ? void 0 : _b.videoCaptureDefaults);
-      const {
-        audioProcessor,
-        videoProcessor,
-        optionsWithoutProcessor
-      } = extractProcessorsFromOptions(mergedOptionsWithProcessors);
-      const constraints = constraintsForOptions(optionsWithoutProcessor);
-      let stream;
       try {
-        stream = yield navigator.mediaDevices.getUserMedia(constraints);
+        const tracks = yield createLocalTracks(mergedOptionsWithProcessors, {
+          loggerName: this.roomOptions.loggerName,
+          loggerContextCb: () => this.logContext
+        });
+        const localTracks = tracks.map(track => {
+          if (isAudioTrack(track)) {
+            this.microphoneError = undefined;
+            track.setAudioContext(this.audioContext);
+            track.source = Track.Source.Microphone;
+            this.emit(ParticipantEvent.AudioStreamAcquired);
+          }
+          if (isVideoTrack(track)) {
+            this.cameraError = undefined;
+            track.source = Track.Source.Camera;
+          }
+          return track;
+        });
+        return localTracks;
       } catch (err) {
         if (err instanceof Error) {
-          if (constraints.audio) {
+          if (options.audio) {
             this.microphoneError = err;
           }
-          if (constraints.video) {
+          if (options.video) {
             this.cameraError = err;
           }
         }
         throw err;
       }
-      if (constraints.audio) {
-        this.microphoneError = undefined;
-        this.emit(ParticipantEvent.AudioStreamAcquired);
-      }
-      if (constraints.video) {
-        this.cameraError = undefined;
-      }
-      return Promise.all(stream.getTracks().map(mediaStreamTrack => __awaiter(this, void 0, void 0, function* () {
-        const isAudio = mediaStreamTrack.kind === 'audio';
-        let trackConstraints;
-        const conOrBool = isAudio ? constraints.audio : constraints.video;
-        if (typeof conOrBool !== 'boolean') {
-          trackConstraints = conOrBool;
-        }
-        const track = mediaTrackToLocalTrack(mediaStreamTrack, trackConstraints, {
-          loggerName: this.roomOptions.loggerName,
-          loggerContextCb: () => this.logContext
-        });
-        if (track.kind === Track.Kind.Video) {
-          track.source = Track.Source.Camera;
-        } else if (track.kind === Track.Kind.Audio) {
-          track.source = Track.Source.Microphone;
-          track.setAudioContext(this.audioContext);
-        }
-        track.mediaStream = stream;
-        if (isAudioTrack(track) && audioProcessor) {
-          yield track.setProcessor(audioProcessor);
-        } else if (isVideoTrack(track) && videoProcessor) {
-          yield track.setProcessor(videoProcessor);
-        }
-        return track;
-      })));
     });
   }
   /**
@@ -20300,7 +20872,31 @@ class LocalParticipant extends Participant {
         if (opts.source) {
           track.source = opts.source;
         }
-        const publishPromise = _this2.publish(track, opts, isStereo);
+        const publishPromise = new Promise((resolve, reject) => __awaiter(_this2, void 0, void 0, function* () {
+          try {
+            if (this.engine.client.currentState !== SignalConnectionState.CONNECTED) {
+              this.log.debug('deferring track publication until signal is connected', Object.assign(Object.assign({}, this.logContext), {
+                track: getLogContextFromTrack(track)
+              }));
+              const timeout = setTimeout(() => {
+                reject(new PublishTrackError('publishing rejected as engine not connected within timeout', 408));
+              }, 15000);
+              yield this.waitUntilEngineConnected();
+              clearTimeout(timeout);
+              const publication = yield this.publish(track, opts, isStereo);
+              resolve(publication);
+            } else {
+              try {
+                const publication = yield this.publish(track, opts, isStereo);
+                resolve(publication);
+              } catch (e) {
+                reject(e);
+              }
+            }
+          } catch (e) {
+            reject(e);
+          }
+        }));
         _this2.pendingPublishPromises.set(track, publishPromise);
         try {
           const publication = yield publishPromise;
@@ -20313,9 +20909,33 @@ class LocalParticipant extends Participant {
       }();
     });
   }
+  waitUntilEngineConnected() {
+    if (!this.signalConnectedFuture) {
+      this.signalConnectedFuture = new Future();
+    }
+    return this.signalConnectedFuture.promise;
+  }
+  hasPermissionsToPublish(track) {
+    if (!this.permissions) {
+      this.log.warn('no permissions present for publishing track', Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
+      return false;
+    }
+    const {
+      canPublish,
+      canPublishSources
+    } = this.permissions;
+    if (canPublish && (canPublishSources.length === 0 || canPublishSources.map(source => getTrackSourceFromProto(source)).includes(track.source))) {
+      return true;
+    }
+    this.log.warn('insufficient permissions to publish', Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
+    return false;
+  }
   publish(track, opts, isStereo) {
     return __awaiter(this, void 0, void 0, function* () {
       var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+      if (!this.hasPermissionsToPublish(track)) {
+        throw new PublishTrackError('failed to publish track, insufficient permissions', 403);
+      }
       const existingTrackOfSource = Array.from(this.trackPublications.values()).find(publishedTrack => isLocalTrack(track) && publishedTrack.source === track.source);
       if (existingTrackOfSource && track.source !== Track.Source.Unknown) {
         this.log.info("publishing a second track with the same source: ".concat(track.source), Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
@@ -20352,6 +20972,27 @@ class LocalParticipant extends Participant {
       track.on(TrackEvent.UpstreamPaused, this.onTrackUpstreamPaused);
       track.on(TrackEvent.UpstreamResumed, this.onTrackUpstreamResumed);
       track.on(TrackEvent.AudioTrackFeatureUpdate, this.onTrackFeatureUpdate);
+      const audioFeatures = [];
+      const disableDtx = !((_a = opts.dtx) !== null && _a !== void 0 ? _a : true);
+      const settings = track.getSourceTrackSettings();
+      if (settings.autoGainControl) {
+        audioFeatures.push(AudioTrackFeature.TF_AUTO_GAIN_CONTROL);
+      }
+      if (settings.echoCancellation) {
+        audioFeatures.push(AudioTrackFeature.TF_ECHO_CANCELLATION);
+      }
+      if (settings.noiseSuppression) {
+        audioFeatures.push(AudioTrackFeature.TF_NOISE_SUPPRESSION);
+      }
+      if (settings.channelCount && settings.channelCount > 1) {
+        audioFeatures.push(AudioTrackFeature.TF_STEREO);
+      }
+      if (disableDtx) {
+        audioFeatures.push(AudioTrackFeature.TF_NO_DTX);
+      }
+      if (isLocalAudioTrack(track) && track.hasPreConnectBuffer) {
+        audioFeatures.push(AudioTrackFeature.TF_PRECONNECT_BUFFER);
+      }
       // create track publication from track
       const req = new AddTrackRequest({
         // get local track id for use during publishing
@@ -20360,12 +21001,13 @@ class LocalParticipant extends Participant {
         type: Track.kindToProto(track.kind),
         muted: track.isMuted,
         source: Track.sourceToProto(track.source),
-        disableDtx: !((_a = opts.dtx) !== null && _a !== void 0 ? _a : true),
+        disableDtx,
         encryption: this.encryptionType,
         stereo: isStereo,
         disableRed: this.isE2EEEnabled || !((_b = opts.red) !== null && _b !== void 0 ? _b : true),
         stream: opts === null || opts === void 0 ? void 0 : opts.stream,
-        backupCodecPolicy: opts === null || opts === void 0 ? void 0 : opts.backupCodecPolicy
+        backupCodecPolicy: opts === null || opts === void 0 ? void 0 : opts.backupCodecPolicy,
+        audioFeatures
       });
       // compute encodings and layers for video
       let encodings;
@@ -20491,11 +21133,28 @@ class LocalParticipant extends Participant {
         yield this.engine.negotiate();
       });
       let ti;
+      const addTrackPromise = new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
+        var _a;
+        try {
+          ti = yield this.engine.addTrack(req);
+          resolve(ti);
+        } catch (err) {
+          if (track.sender && ((_a = this.engine.pcManager) === null || _a === void 0 ? void 0 : _a.publisher)) {
+            this.engine.pcManager.publisher.removeTrack(track.sender);
+            yield this.engine.negotiate().catch(negotiateErr => {
+              this.log.error('failed to negotiate after removing track due to failed add track request', Object.assign(Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)), {
+                error: negotiateErr
+              }));
+            });
+          }
+          reject(err);
+        }
+      }));
       if (this.enabledPublishVideoCodecs.length > 0) {
-        const rets = yield Promise.all([this.engine.addTrack(req), negotiate()]);
+        const rets = yield Promise.all([addTrackPromise, negotiate()]);
         ti = rets[0];
       } else {
-        ti = yield this.engine.addTrack(req);
+        ti = yield addTrackPromise;
         // server might not support the codec the client has requested, in that case, fallback
         // to a supported codec
         let primaryCodecMime;
@@ -20536,6 +21195,75 @@ class LocalParticipant extends Participant {
       this.addTrackPublication(publication);
       // send event for publication
       this.emit(ParticipantEvent.LocalTrackPublished, publication);
+      if (isLocalAudioTrack(track) && ti.audioFeatures.includes(AudioTrackFeature.TF_PRECONNECT_BUFFER)) {
+        const stream = track.getPreConnectBuffer();
+        // TODO: we're registering the listener after negotiation, so there might be a race
+        this.on(ParticipantEvent.LocalTrackSubscribed, pub => {
+          if (pub.trackSid === ti.sid) {
+            if (!track.hasPreConnectBuffer) {
+              this.log.warn('subscribe event came to late, buffer already closed', this.logContext);
+              return;
+            }
+            this.log.debug('finished recording preconnect buffer', Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
+            track.stopPreConnectBuffer();
+          }
+        });
+        if (stream) {
+          const bufferStreamPromise = new Promise((resolve, reject) => __awaiter(this, void 0, void 0, function* () {
+            var _a, e_2, _b, _c;
+            var _d, _e;
+            try {
+              this.log.debug('waiting for agent', Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
+              const agentActiveTimeout = setTimeout(() => {
+                reject(new Error('agent not active within 10 seconds'));
+              }, 10000);
+              const agent = yield this.waitUntilActiveAgentPresent();
+              clearTimeout(agentActiveTimeout);
+              this.log.debug('sending preconnect buffer', Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
+              const writer = yield this.streamBytes({
+                name: 'preconnect-buffer',
+                mimeType: 'audio/opus',
+                topic: 'lk.agent.pre-connect-audio-buffer',
+                destinationIdentities: [agent.identity],
+                attributes: {
+                  trackId: publication.trackSid,
+                  sampleRate: String((_d = settings.sampleRate) !== null && _d !== void 0 ? _d : '48000'),
+                  channels: String((_e = settings.channelCount) !== null && _e !== void 0 ? _e : '1')
+                }
+              });
+              try {
+                for (var _f = true, stream_1 = __asyncValues(stream), stream_1_1; stream_1_1 = yield stream_1.next(), _a = stream_1_1.done, !_a; _f = true) {
+                  _c = stream_1_1.value;
+                  _f = false;
+                  const chunk = _c;
+                  yield writer.write(chunk);
+                }
+              } catch (e_2_1) {
+                e_2 = {
+                  error: e_2_1
+                };
+              } finally {
+                try {
+                  if (!_f && !_a && (_b = stream_1.return)) yield _b.call(stream_1);
+                } finally {
+                  if (e_2) throw e_2.error;
+                }
+              }
+              yield writer.close();
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          }));
+          bufferStreamPromise.then(() => {
+            this.log.debug('preconnect buffer sent successfully', Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)));
+          }).catch(e => {
+            this.log.error('error sending preconnect buffer', Object.assign(Object.assign(Object.assign({}, this.logContext), getLogContextFromTrack(track)), {
+              error: e
+            }));
+          });
+        }
+      }
       return publication;
     });
   }
@@ -20852,7 +21580,8 @@ class LocalParticipant extends Participant {
         totalSize: totalTextLength,
         destinationIdentities: options === null || options === void 0 ? void 0 : options.destinationIdentities,
         topic: options === null || options === void 0 ? void 0 : options.topic,
-        attachedStreamIds: fileIds
+        attachedStreamIds: fileIds,
+        attributes: options === null || options === void 0 ? void 0 : options.attributes
       });
       yield writer.write(text);
       // set text part of progress to 1
@@ -20885,7 +21614,8 @@ class LocalParticipant extends Participant {
         mimeType: 'text/plain',
         timestamp: Date.now(),
         topic: (_b = options === null || options === void 0 ? void 0 : options.topic) !== null && _b !== void 0 ? _b : '',
-        size: options === null || options === void 0 ? void 0 : options.totalSize
+        size: options === null || options === void 0 ? void 0 : options.totalSize,
+        attributes: options === null || options === void 0 ? void 0 : options.attributes
       };
       const header = new DataStream_Header({
         streamId,
@@ -20893,6 +21623,7 @@ class LocalParticipant extends Participant {
         topic: info.topic,
         timestamp: numberToBigInt(info.timestamp),
         totalLength: numberToBigInt(options === null || options === void 0 ? void 0 : options.totalSize),
+        attributes: info.attributes,
         contentHeader: {
           case: 'textHeader',
           value: new DataStream_TextHeader({
@@ -20976,23 +21707,58 @@ class LocalParticipant extends Participant {
   }
   _sendFile(streamId, file, options) {
     return __awaiter(this, void 0, void 0, function* () {
-      var _a, _b;
-      const totalLength = file.size;
-      const header = new DataStream_Header({
-        totalLength: numberToBigInt(totalLength),
-        mimeType: (_a = options === null || options === void 0 ? void 0 : options.mimeType) !== null && _a !== void 0 ? _a : file.type,
+      var _a;
+      const writer = yield this.streamBytes({
         streamId,
+        totalSize: file.size,
+        name: file.name,
+        mimeType: (_a = options === null || options === void 0 ? void 0 : options.mimeType) !== null && _a !== void 0 ? _a : file.type,
         topic: options === null || options === void 0 ? void 0 : options.topic,
-        encryptionType: options === null || options === void 0 ? void 0 : options.encryptionType,
+        destinationIdentities: options === null || options === void 0 ? void 0 : options.destinationIdentities
+      });
+      const reader = file.stream().getReader();
+      while (true) {
+        const {
+          done,
+          value
+        } = yield reader.read();
+        if (done) {
+          break;
+        }
+        yield writer.write(value);
+      }
+      yield writer.close();
+      return writer.info;
+    });
+  }
+  streamBytes(options) {
+    return __awaiter(this, void 0, void 0, function* () {
+      var _a, _b, _c, _d, _e;
+      const streamId = (_a = options === null || options === void 0 ? void 0 : options.streamId) !== null && _a !== void 0 ? _a : crypto.randomUUID();
+      const destinationIdentities = options === null || options === void 0 ? void 0 : options.destinationIdentities;
+      const info = {
+        id: streamId,
+        mimeType: (_b = options === null || options === void 0 ? void 0 : options.mimeType) !== null && _b !== void 0 ? _b : 'application/octet-stream',
+        topic: (_c = options === null || options === void 0 ? void 0 : options.topic) !== null && _c !== void 0 ? _c : '',
+        timestamp: Date.now(),
+        attributes: options === null || options === void 0 ? void 0 : options.attributes,
+        size: options === null || options === void 0 ? void 0 : options.totalSize,
+        name: (_d = options === null || options === void 0 ? void 0 : options.name) !== null && _d !== void 0 ? _d : 'unknown'
+      };
+      const header = new DataStream_Header({
+        totalLength: numberToBigInt((_e = info.size) !== null && _e !== void 0 ? _e : 0),
+        mimeType: info.mimeType,
+        streamId,
+        topic: info.topic,
         timestamp: numberToBigInt(Date.now()),
+        attributes: info.attributes,
         contentHeader: {
           case: 'byteHeader',
           value: new DataStream_ByteHeader({
-            name: file.name
+            name: info.name
           })
         }
       });
-      const destinationIdentities = options === null || options === void 0 ? void 0 : options.destinationIdentities;
       const packet = new DataPacket({
         destinationIdentities,
         value: {
@@ -21001,45 +21767,60 @@ class LocalParticipant extends Participant {
         }
       });
       yield this.engine.sendDataPacket(packet, DataPacket_Kind.RELIABLE);
-      function read(b) {
-        return new Promise(resolve => {
-          const fr = new FileReader();
-          fr.onload = () => {
-            resolve(new Uint8Array(fr.result));
-          };
-          fr.readAsArrayBuffer(b);
-        });
-      }
-      const totalChunks = Math.ceil(totalLength / STREAM_CHUNK_SIZE);
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkData = yield read(file.slice(i * STREAM_CHUNK_SIZE, Math.min((i + 1) * STREAM_CHUNK_SIZE, totalLength)));
-        yield this.engine.waitForBufferStatusLow(DataPacket_Kind.RELIABLE);
-        const chunk = new DataStream_Chunk({
-          content: chunkData,
-          streamId,
-          chunkIndex: numberToBigInt(i)
-        });
-        const chunkPacket = new DataPacket({
-          destinationIdentities,
-          value: {
-            case: 'streamChunk',
-            value: chunk
-          }
-        });
-        yield this.engine.sendDataPacket(chunkPacket, DataPacket_Kind.RELIABLE);
-        (_b = options === null || options === void 0 ? void 0 : options.onProgress) === null || _b === void 0 ? void 0 : _b.call(options, (i + 1) / totalChunks);
-      }
-      const trailer = new DataStream_Trailer({
-        streamId
-      });
-      const trailerPacket = new DataPacket({
-        destinationIdentities,
-        value: {
-          case: 'streamTrailer',
-          value: trailer
+      let chunkId = 0;
+      const writeMutex = new _();
+      const engine = this.engine;
+      const log = this.log;
+      const writableStream = new WritableStream({
+        write(chunk) {
+          return __awaiter(this, void 0, void 0, function* () {
+            const unlock = yield writeMutex.lock();
+            let byteOffset = 0;
+            try {
+              while (byteOffset < chunk.byteLength) {
+                const subChunk = chunk.slice(byteOffset, byteOffset + STREAM_CHUNK_SIZE);
+                yield engine.waitForBufferStatusLow(DataPacket_Kind.RELIABLE);
+                const chunkPacket = new DataPacket({
+                  destinationIdentities,
+                  value: {
+                    case: 'streamChunk',
+                    value: new DataStream_Chunk({
+                      content: subChunk,
+                      streamId,
+                      chunkIndex: numberToBigInt(chunkId)
+                    })
+                  }
+                });
+                yield engine.sendDataPacket(chunkPacket, DataPacket_Kind.RELIABLE);
+                chunkId += 1;
+                byteOffset += subChunk.byteLength;
+              }
+            } finally {
+              unlock();
+            }
+          });
+        },
+        close() {
+          return __awaiter(this, void 0, void 0, function* () {
+            const trailer = new DataStream_Trailer({
+              streamId
+            });
+            const trailerPacket = new DataPacket({
+              destinationIdentities,
+              value: {
+                case: 'streamTrailer',
+                value: trailer
+              }
+            });
+            yield engine.sendDataPacket(trailerPacket, DataPacket_Kind.RELIABLE);
+          });
+        },
+        abort(err) {
+          log.error('Sink error:', err);
         }
       });
-      yield this.engine.sendDataPacket(trailerPacket, DataPacket_Kind.RELIABLE);
+      const byteWriter = new ByteStreamWriter(writableStream, info);
+      return byteWriter;
     });
   }
   /**
@@ -21210,11 +21991,6 @@ class LocalParticipant extends Participant {
   }
   /** @internal */
   updateInfo(info) {
-    if (info.sid !== this.sid) {
-      // drop updates that specify a wrong sid.
-      // the sid for local participant is only explicitly set on join and full reconnect
-      return false;
-    }
     if (!super.updateInfo(info)) {
       return false;
     }
@@ -21235,6 +22011,29 @@ class LocalParticipant extends Participant {
       }
     });
     return true;
+  }
+  /** @internal */
+  setActiveAgent(agent) {
+    var _a, _b, _c, _d;
+    this.firstActiveAgent = agent;
+    if (agent && !this.firstActiveAgent) {
+      this.firstActiveAgent = agent;
+    }
+    if (agent) {
+      (_b = (_a = this.activeAgentFuture) === null || _a === void 0 ? void 0 : _a.resolve) === null || _b === void 0 ? void 0 : _b.call(_a, agent);
+    } else {
+      (_d = (_c = this.activeAgentFuture) === null || _c === void 0 ? void 0 : _c.reject) === null || _d === void 0 ? void 0 : _d.call(_c, 'Agent disconnected');
+    }
+    this.activeAgentFuture = undefined;
+  }
+  waitUntilActiveAgentPresent() {
+    if (this.firstActiveAgent) {
+      return Promise.resolve(this.firstActiveAgent);
+    }
+    if (!this.activeAgentFuture) {
+      this.activeAgentFuture = new Future();
+    }
+    return this.activeAgentFuture.promise;
   }
   getPublicationForTrack(track) {
     let publication;
@@ -22429,7 +23228,7 @@ class Room extends eventsExports.EventEmitter {
       }
     };
     this.handleDeviceChange = r(ev => __awaiter(this, void 0, void 0, function* () {
-      var _a, _b;
+      var _a, _b, _c;
       const previousDevices = DeviceManager.getInstance().previousDevices;
       // check for available devices, but don't request permissions in order to avoid prompts for kinds that haven't been used before
       const availableDevices = yield DeviceManager.getInstance().getDevices(undefined, false);
@@ -22465,31 +23264,37 @@ class Room extends eventsExports.EventEmitter {
           }
         }
       }
-      // inputs are automatically handled via TrackEvent.Ended causing a TrackEvent.Restarted. Here we only need to worry about audiooutputs changing
       const kinds = ['audiooutput', 'audioinput', 'videoinput'];
       for (let kind of kinds) {
+        const targetSource = kindToSource(kind);
+        const targetPublication = this.localParticipant.getTrackPublication(targetSource);
+        if (targetPublication && ((_a = targetPublication.track) === null || _a === void 0 ? void 0 : _a.isUserProvided)) {
+          // if the track is user provided, we don't want to switch devices on behalf of the user
+          continue;
+        }
         const devicesOfKind = availableDevices.filter(d => d.kind === kind);
         const activeDevice = this.getActiveDevice(kind);
-        if (activeDevice === ((_a = previousDevices.filter(info => info.kind === kind)[0]) === null || _a === void 0 ? void 0 : _a.deviceId)) {
+        if (activeDevice === ((_b = previousDevices.filter(info => info.kind === kind)[0]) === null || _b === void 0 ? void 0 : _b.deviceId)) {
           // in  Safari the first device is always the default, so we assume a user on the default device would like to switch to the default once it changes
           // FF doesn't emit an event when the default device changes, so we perform the same best effort and switch to the new device once connected and if it's the first in the array
-          if (devicesOfKind.length > 0 && ((_b = devicesOfKind[0]) === null || _b === void 0 ? void 0 : _b.deviceId) !== activeDevice) {
+          if (devicesOfKind.length > 0 && ((_c = devicesOfKind[0]) === null || _c === void 0 ? void 0 : _c.deviceId) !== activeDevice) {
             console.log('switching to first device', devicesOfKind[0].deviceId);
             yield this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
             continue;
           }
         }
-        if (kind === 'audioinput' && !isSafari() || kind === 'videoinput') {
+        if (kind === 'audioinput' && !isSafariBased() || kind === 'videoinput') {
           // airpods on Safari need special handling for audioinput as the track doesn't end as soon as you take them out
           continue;
         }
         // switch to first available device if previously active device is not available any more
-        if (devicesOfKind.length > 0 && !devicesOfKind.find(deviceInfo => deviceInfo.deviceId === this.getActiveDevice(kind))) {
+        if (devicesOfKind.length > 0 && !devicesOfKind.find(deviceInfo => deviceInfo.deviceId === this.getActiveDevice(kind)) && (
+        // avoid switching audio output on safari without explicit user action as it leads to slowed down audio playback
+        kind !== 'audiooutput' || !isSafariBased())) {
           console.log('switching to second device', devicesOfKind[0].deviceId);
           yield this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
         }
       }
-      this.emit(RoomEvent.MediaDevicesChanged);
     }), 500);
     this.handleRoomUpdate = room => {
       const oldRoom = this.roomInfo;
@@ -22569,8 +23374,8 @@ class Room extends eventsExports.EventEmitter {
     this.onLocalConnectionQualityChanged = quality => {
       this.emit(RoomEvent.ConnectionQualityChanged, quality, this.localParticipant);
     };
-    this.onMediaDevicesError = e => {
-      this.emit(RoomEvent.MediaDevicesError, e);
+    this.onMediaDevicesError = (e, kind) => {
+      this.emit(RoomEvent.MediaDevicesError, e, kind);
     };
     this.onLocalParticipantPermissionsChanged = prevPermissions => {
       this.emit(RoomEvent.ParticipantPermissionsChanged, prevPermissions, this.localParticipant);
@@ -22854,6 +23659,20 @@ class Room extends eventsExports.EventEmitter {
       }
       this.localParticipant.emit(ParticipantEvent.LocalTrackSubscribed, trackPublication);
       this.emitWhenConnected(RoomEvent.LocalTrackSubscribed, trackPublication, this.localParticipant);
+    }).on(EngineEvent.RoomMoved, roomMoved => {
+      this.log.debug('room moved', roomMoved);
+      if (roomMoved.room) {
+        this.handleRoomUpdate(roomMoved.room);
+      }
+      this.remoteParticipants.forEach((participant, identity) => {
+        this.handleParticipantDisconnected(identity, participant);
+      });
+      this.emit(RoomEvent.Moved, roomMoved.room.name, roomMoved.token);
+      if (roomMoved.participant) {
+        this.handleParticipantUpdates([roomMoved.participant, ...roomMoved.otherParticipants]);
+      } else {
+        this.handleParticipantUpdates(roomMoved.otherParticipants);
+      }
     });
     if (this.localParticipant) {
       this.localParticipant.setupEngine(this.engine);
@@ -23076,7 +23895,7 @@ class Room extends eventsExports.EventEmitter {
   switchActiveDevice(kind_1, deviceId_1) {
     return __awaiter(this, arguments, void 0, function (kind, deviceId) {
       var _this3 = this;
-      let exact = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+      let exact = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : true;
       return function* () {
         var _a, _b, _c, _d, _e, _f, _g;
         var _h;
@@ -23189,6 +24008,10 @@ class Room extends eventsExports.EventEmitter {
       this.log.warn('skipping incoming track after Room disconnected', this.logContext);
       return;
     }
+    if (mediaTrack.readyState === 'ended') {
+      this.log.info('skipping incoming track as it already ended', this.logContext);
+      return;
+    }
     const parts = unpackStreamId(stream.id);
     const participantSid = parts[0];
     let streamId = parts[1];
@@ -23278,6 +24101,7 @@ class Room extends eventsExports.EventEmitter {
       participant.unpublishTrack(publication.trackSid, true);
     });
     this.emit(RoomEvent.ParticipantDisconnected, participant);
+    participant.setDisconnected();
     (_a = this.localParticipant) === null || _a === void 0 ? void 0 : _a.handleParticipantDisconnected(participant.identity);
   }
   handleStreamHeader(streamHeader, participantIdentity) {
@@ -23362,7 +24186,7 @@ class Room extends eventsExports.EventEmitter {
     if (textBuffer) {
       textBuffer.info.attributes = Object.assign(Object.assign({}, textBuffer.info.attributes), trailer.attributes);
       textBuffer.controller.close();
-      this.byteStreamControllers.delete(trailer.streamId);
+      this.textStreamControllers.delete(trailer.streamId);
     }
     const fileBuffer = this.byteStreamControllers.get(trailer.streamId);
     if (fileBuffer) {
@@ -23484,6 +24308,11 @@ class Room extends eventsExports.EventEmitter {
       this.emit(RoomEvent.TrackSubscriptionFailed, trackSid, participant, error);
     }).on(ParticipantEvent.TrackSubscriptionPermissionChanged, (pub, status) => {
       this.emitWhenConnected(RoomEvent.TrackSubscriptionPermissionChanged, pub, status, participant);
+    }).on(ParticipantEvent.Active, () => {
+      this.emitWhenConnected(RoomEvent.ParticipantActive, participant);
+      if (participant.kind === ParticipantInfo_Kind.AGENT) {
+        this.localParticipant.setActiveAgent(participant);
+      }
     });
     // update info at the end after callbacks have been set up
     if (info) {
@@ -23696,7 +24525,7 @@ class Room extends eventsExports.EventEmitter {
       args[_key3 - 1] = arguments[_key3];
     }
     // active speaker updates are too spammy
-    if (event !== RoomEvent.ActiveSpeakersChanged) {
+    if (event !== RoomEvent.ActiveSpeakersChanged && event !== RoomEvent.TranscriptionReceived) {
       // only extract logContext from arguments in order to avoid logging the whole object tree
       const minimizedArgs = mapArgs(args).filter(arg => arg !== undefined);
       this.log.debug("room event ".concat(event), Object.assign(Object.assign({}, this.logContext), {
@@ -23724,6 +24553,36 @@ function mapArgs(args) {
     return arg;
   });
 }
+
+// This file was generated from JSON Schema using quicktype, do not modify it directly.
+// The code generation lives at https://github.com/livekit/attribute-definitions
+//
+// To parse this data:
+//
+//   import { Convert, AgentAttributes, TranscriptionAttributes } from "./file";
+//
+//   const agentAttributes = Convert.toAgentAttributes(json);
+//   const transcriptionAttributes = Convert.toTranscriptionAttributes(json);
+// Converts JSON strings to/from your types
+class Convert {
+  static toAgentAttributes(json) {
+    return JSON.parse(json);
+  }
+  static agentAttributesToJson(value) {
+    return JSON.stringify(value);
+  }
+  static toTranscriptionAttributes(json) {
+    return JSON.parse(json);
+  }
+  static transcriptionAttributesToJson(value) {
+    return JSON.stringify(value);
+  }
+}
+
+var attributeTypings = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  Convert: Convert
+});
 
 var CheckStatus;
 (function (CheckStatus) {
@@ -24063,131 +24922,6 @@ class ConnectionProtocolCheck extends Checker {
       return protocolStats;
     });
   }
-}
-
-/**
- * Creates a local video and audio track at the same time. When acquiring both
- * audio and video tracks together, it'll display a single permission prompt to
- * the user instead of two separate ones.
- * @param options
- */
-function createLocalTracks(options) {
-  return __awaiter(this, void 0, void 0, function* () {
-    var _a, _b;
-    // set default options to true
-    options !== null && options !== void 0 ? options : options = {};
-    (_a = options.audio) !== null && _a !== void 0 ? _a : options.audio = {
-      deviceId: 'default'
-    };
-    (_b = options.video) !== null && _b !== void 0 ? _b : options.video = {
-      deviceId: 'default'
-    };
-    const {
-      audioProcessor,
-      videoProcessor
-    } = extractProcessorsFromOptions(options);
-    const opts = mergeDefaultOptions(options, audioDefaults, videoDefaults);
-    const constraints = constraintsForOptions(opts);
-    // Keep a reference to the promise on DeviceManager and await it in getLocalDevices()
-    // works around iOS Safari Bug https://bugs.webkit.org/show_bug.cgi?id=179363
-    const mediaPromise = navigator.mediaDevices.getUserMedia(constraints);
-    if (options.audio) {
-      DeviceManager.userMediaPromiseMap.set('audioinput', mediaPromise);
-      mediaPromise.catch(() => DeviceManager.userMediaPromiseMap.delete('audioinput'));
-    }
-    if (options.video) {
-      DeviceManager.userMediaPromiseMap.set('videoinput', mediaPromise);
-      mediaPromise.catch(() => DeviceManager.userMediaPromiseMap.delete('videoinput'));
-    }
-    const stream = yield mediaPromise;
-    return Promise.all(stream.getTracks().map(mediaStreamTrack => __awaiter(this, void 0, void 0, function* () {
-      const isAudio = mediaStreamTrack.kind === 'audio';
-      isAudio ? opts.audio : opts.video;
-      let trackConstraints;
-      const conOrBool = isAudio ? constraints.audio : constraints.video;
-      if (typeof conOrBool !== 'boolean') {
-        trackConstraints = conOrBool;
-      }
-      // update the constraints with the device id the user gave permissions to in the permission prompt
-      // otherwise each track restart (e.g. mute - unmute) will try to initialize the device again -> causing additional permission prompts
-      const newDeviceId = mediaStreamTrack.getSettings().deviceId;
-      if ((trackConstraints === null || trackConstraints === void 0 ? void 0 : trackConstraints.deviceId) && unwrapConstraint(trackConstraints.deviceId) !== newDeviceId) {
-        trackConstraints.deviceId = newDeviceId;
-      } else if (!trackConstraints) {
-        trackConstraints = {
-          deviceId: newDeviceId
-        };
-      }
-      const track = mediaTrackToLocalTrack(mediaStreamTrack, trackConstraints);
-      if (track.kind === Track.Kind.Video) {
-        track.source = Track.Source.Camera;
-      } else if (track.kind === Track.Kind.Audio) {
-        track.source = Track.Source.Microphone;
-      }
-      track.mediaStream = stream;
-      if (isAudioTrack(track) && audioProcessor) {
-        yield track.setProcessor(audioProcessor);
-      } else if (isVideoTrack(track) && videoProcessor) {
-        yield track.setProcessor(videoProcessor);
-      }
-      return track;
-    })));
-  });
-}
-/**
- * Creates a [[LocalVideoTrack]] with getUserMedia()
- * @param options
- */
-function createLocalVideoTrack(options) {
-  return __awaiter(this, void 0, void 0, function* () {
-    const tracks = yield createLocalTracks({
-      audio: false,
-      video: options
-    });
-    return tracks[0];
-  });
-}
-function createLocalAudioTrack(options) {
-  return __awaiter(this, void 0, void 0, function* () {
-    const tracks = yield createLocalTracks({
-      audio: options,
-      video: false
-    });
-    return tracks[0];
-  });
-}
-/**
- * Creates a screen capture tracks with getDisplayMedia().
- * A LocalVideoTrack is always created and returned.
- * If { audio: true }, and the browser supports audio capture, a LocalAudioTrack is also created.
- */
-function createLocalScreenTracks(options) {
-  return __awaiter(this, void 0, void 0, function* () {
-    if (options === undefined) {
-      options = {};
-    }
-    if (options.resolution === undefined && !isSafari17()) {
-      options.resolution = ScreenSharePresets.h1080fps30.resolution;
-    }
-    if (navigator.mediaDevices.getDisplayMedia === undefined) {
-      throw new DeviceUnsupportedError('getDisplayMedia not supported');
-    }
-    const constraints = screenCaptureToDisplayMediaStreamOptions(options);
-    const stream = yield navigator.mediaDevices.getDisplayMedia(constraints);
-    const tracks = stream.getVideoTracks();
-    if (tracks.length === 0) {
-      throw new TrackInvalidError('no video track found');
-    }
-    const screenVideo = new LocalVideoTrack(tracks[0], undefined, false);
-    screenVideo.source = Track.Source.ScreenShare;
-    const localTracks = [screenVideo];
-    if (stream.getAudioTracks().length > 0) {
-      const screenAudio = new LocalAudioTrack(stream.getAudioTracks()[0], undefined, false);
-      screenAudio.source = Track.Source.ScreenShareAudio;
-      localTracks.push(screenAudio);
-    }
-    return localTracks;
-  });
 }
 
 class PublishAudioCheck extends Checker {
@@ -24664,5 +25398,5 @@ function isFacingModeValue(item) {
   return item === undefined || allowedValues.includes(item);
 }
 
-export { AudioPresets, BackupCodecPolicy, BaseKeyProvider, CheckStatus, Checker, ConnectionCheck, ConnectionError, ConnectionErrorReason, ConnectionQuality, ConnectionState, CriticalTimers, CryptorError, CryptorErrorReason, CryptorEvent, DataPacket_Kind, DefaultReconnectPolicy, DeviceUnsupportedError, DisconnectReason, EncryptionEvent, EngineEvent, ExternalE2EEKeyProvider, KeyHandlerEvent, KeyProviderEvent, LivekitError, LocalAudioTrack, LocalParticipant, LocalTrack, LocalTrackPublication, LocalVideoTrack, LogLevel, LoggerNames, MediaDeviceFailure, _ as Mutex, NegotiationError, Participant, ParticipantEvent, ParticipantInfo_Kind as ParticipantKind, PublishDataError, RemoteAudioTrack, RemoteParticipant, RemoteTrack, RemoteTrackPublication, RemoteVideoTrack, Room, RoomEvent, RpcError, ScreenSharePresets, SignalRequestError, SubscriptionError, Track, TrackEvent, TrackInvalidError, TrackPublication, TrackType, UnexpectedConnectionState, UnsupportedServer, VideoPreset, VideoPresets, VideoPresets43, VideoQuality, attachToElement, compareVersions, createAudioAnalyser, createE2EEKey, createKeyMaterialFromBuffer, createKeyMaterialFromString, createLocalAudioTrack, createLocalScreenTracks, createLocalTracks, createLocalVideoTrack, deriveKeys, detachTrack, facingModeFromDeviceLabel, facingModeFromLocalTrack, getBrowser, getEmptyAudioStreamTrack, getEmptyVideoStreamTrack, getLogger, importKey, isAudioTrack, isBackupCodec, isBrowserSupported, isE2EESupported, isInsertableStreamSupported, isLocalParticipant, isLocalTrack, isRemoteParticipant, isRemoteTrack, isScriptTransformSupported, isVideoFrame, isVideoTrack, needsRbspUnescaping, parseRbsp, protocolVersion, ratchet, setLogExtension, setLogLevel, supportsAV1, supportsAdaptiveStream, supportsDynacast, supportsVP9, version, videoCodecs, writeRbsp };
+export { AudioPresets, BackupCodecPolicy, BaseKeyProvider, CheckStatus, Checker, ConnectionCheck, ConnectionError, ConnectionErrorReason, ConnectionQuality, ConnectionState, CriticalTimers, CryptorError, CryptorErrorReason, CryptorEvent, DataPacket_Kind, DefaultReconnectPolicy, DeviceUnsupportedError, DisconnectReason, EncryptionEvent, EngineEvent, ExternalE2EEKeyProvider, KeyHandlerEvent, KeyProviderEvent, LivekitError, LocalAudioTrack, LocalParticipant, LocalTrack, LocalTrackPublication, LocalTrackRecorder, LocalVideoTrack, LogLevel, LoggerNames, MediaDeviceFailure, _ as Mutex, NegotiationError, Participant, ParticipantEvent, ParticipantInfo_Kind as ParticipantKind, PublishDataError, PublishTrackError, RemoteAudioTrack, RemoteParticipant, RemoteTrack, RemoteTrackPublication, RemoteVideoTrack, Room, RoomEvent, RpcError, ScreenSharePresets, SignalRequestError, SubscriptionError, Track, TrackEvent, TrackInvalidError, TrackPublication, TrackType, UnexpectedConnectionState, UnsupportedServer, VideoPreset, VideoPresets, VideoPresets43, VideoQuality, attachToElement, attributeTypings as attributes, compareVersions, createAudioAnalyser, createE2EEKey, createKeyMaterialFromBuffer, createKeyMaterialFromString, createLocalAudioTrack, createLocalScreenTracks, createLocalTracks, createLocalVideoTrack, deriveKeys, detachTrack, facingModeFromDeviceLabel, facingModeFromLocalTrack, getBrowser, getEmptyAudioStreamTrack, getEmptyVideoStreamTrack, getLogger, importKey, isAudioTrack, isBackupCodec, isBrowserSupported, isE2EESupported, isInsertableStreamSupported, isLocalParticipant, isLocalTrack, isRemoteParticipant, isRemoteTrack, isScriptTransformSupported, isVideoFrame, isVideoTrack, needsRbspUnescaping, parseRbsp, protocolVersion, ratchet, setLogExtension, setLogLevel, supportsAV1, supportsAdaptiveStream, supportsDynacast, supportsVP9, version, videoCodecs, writeRbsp };
 //# sourceMappingURL=livekit-client.esm.mjs.map

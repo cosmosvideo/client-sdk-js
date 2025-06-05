@@ -7,6 +7,7 @@ import type RemoteTrackPublication from '../track/RemoteTrackPublication';
 import { Track } from '../track/Track';
 import type { TrackPublication } from '../track/TrackPublication';
 import type { ChatMessage, LoggerOptions, TranscriptionSegment } from '../types';
+import { Future } from '../utils';
 export declare enum ConnectionQuality {
     Excellent = "excellent",
     Good = "good",
@@ -46,11 +47,13 @@ export default class Participant extends Participant_base {
     protected audioContext?: AudioContext;
     protected log: StructuredLogger;
     protected loggerOptions?: LoggerOptions;
+    protected activeFuture?: Future<void>;
     protected get logContext(): {
         [x: string]: unknown;
     };
     get isEncrypted(): boolean;
     get isAgent(): boolean;
+    get isActive(): boolean;
     get kind(): ParticipantKind;
     /** participant attributes, similar to metadata, but as a key/value map */
     get attributes(): Readonly<Record<string, string>>;
@@ -66,6 +69,11 @@ export default class Participant extends Participant_base {
      * Finds the first track that matches the track's name.
      */
     getTrackPublicationByName(name: string): TrackPublication | undefined;
+    /**
+     * Waits until the participant is active and ready to receive data messages
+     * @returns a promise that resolves when the participant is active
+     */
+    waitUntilActive(): Promise<void>;
     get connectionQuality(): ConnectionQuality;
     get isCameraEnabled(): boolean;
     get isMicrophoneEnabled(): boolean;
@@ -93,6 +101,10 @@ export default class Participant extends Participant_base {
     /**
      * @internal
      */
+    setDisconnected(): void;
+    /**
+     * @internal
+     */
     setAudioContext(ctx: AudioContext | undefined): void;
     protected addTrackPublication(publication: TrackPublication): void;
 }
@@ -115,12 +127,13 @@ export type ParticipantEventCallbacks = {
     connectionQualityChanged: (connectionQuality: ConnectionQuality) => void;
     trackStreamStateChanged: (publication: RemoteTrackPublication, streamState: Track.StreamState) => void;
     trackSubscriptionPermissionChanged: (publication: RemoteTrackPublication, status: TrackPublication.PermissionStatus) => void;
-    mediaDevicesError: (error: Error) => void;
+    mediaDevicesError: (error: Error, kind?: MediaDeviceKind) => void;
     audioStreamAcquired: () => void;
     participantPermissionsChanged: (prevPermissions?: ParticipantPermission) => void;
     trackSubscriptionStatusChanged: (publication: RemoteTrackPublication, status: TrackPublication.SubscriptionStatus) => void;
     attributesChanged: (changedAttributes: Record<string, string>) => void;
     localTrackSubscribed: (trackPublication: LocalTrackPublication) => void;
     chatMessage: (msg: ChatMessage) => void;
+    active: () => void;
 };
 //# sourceMappingURL=Participant.d.ts.map

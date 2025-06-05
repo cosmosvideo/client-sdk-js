@@ -1,4 +1,5 @@
 import { ChatMessage as ChatMessageModel, ClientInfo, DisconnectReason, Transcription as TranscriptionModel } from '@livekit/protocol';
+import type { BrowserDetails } from '../utils/browserParser';
 import type { ConnectionError } from './errors';
 import type LocalParticipant from './participant/LocalParticipant';
 import type Participant from './participant/Participant';
@@ -32,7 +33,9 @@ export declare function isBrowserSupported(): boolean;
 export declare function isFireFox(): boolean;
 export declare function isChromiumBased(): boolean;
 export declare function isSafari(): boolean;
+export declare function isSafariBased(): boolean;
 export declare function isSafari17(): boolean;
+export declare function isSafariSvcApi(browser?: BrowserDetails): boolean;
 export declare function isMobile(): boolean;
 export declare function isE2EESimulcastSupported(): boolean | undefined;
 export declare function isWeb(): boolean;

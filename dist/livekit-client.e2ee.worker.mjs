@@ -385,9 +385,9 @@ const workerLogger = loglevelExports.getLogger('lk-e2ee');
 
 var e = Object.defineProperty;
 var h = (i, s, t) => s in i ? e(i, s, {
-  enumerable: !0,
-  configurable: !0,
-  writable: !0,
+  enumerable: true,
+  configurable: true,
+  writable: true,
   value: t
 }) : i[s] = t;
 var o = (i, s, t) => h(i, typeof s != "symbol" ? s + "" : s, t);
@@ -501,6 +501,7 @@ var ConnectionErrorReason;
   ConnectionErrorReason[ConnectionErrorReason["InternalError"] = 2] = "InternalError";
   ConnectionErrorReason[ConnectionErrorReason["Cancelled"] = 3] = "Cancelled";
   ConnectionErrorReason[ConnectionErrorReason["LeaveRequest"] = 4] = "LeaveRequest";
+  ConnectionErrorReason[ConnectionErrorReason["Timeout"] = 5] = "Timeout";
 })(ConnectionErrorReason || (ConnectionErrorReason = {}));
 var MediaDeviceFailure;
 (function (MediaDeviceFailure) {
@@ -549,11 +550,16 @@ class CryptorError extends LivekitError {
 var KeyProviderEvent;
 (function (KeyProviderEvent) {
   KeyProviderEvent["SetKey"] = "setKey";
+  /** Event for requesting to ratchet the key used to encrypt the stream */
   KeyProviderEvent["RatchetRequest"] = "ratchetRequest";
+  /** Emitted when a key is ratcheted. Could be after auto-ratcheting on decryption failure or
+   *  following a `RatchetRequest`, will contain the ratcheted key material */
   KeyProviderEvent["KeyRatcheted"] = "keyRatcheted";
 })(KeyProviderEvent || (KeyProviderEvent = {}));
 var KeyHandlerEvent;
 (function (KeyHandlerEvent) {
+  /** Emitted when a key has been ratcheted. Is emitted when any key has been ratcheted
+   * i.e. when the FrameCryptor tried to ratchet when decryption is failing  */
   KeyHandlerEvent["KeyRatcheted"] = "keyRatcheted";
 })(KeyHandlerEvent || (KeyHandlerEvent = {}));
 var EncryptionEvent;
@@ -1416,11 +1422,12 @@ class FrameCryptor extends BaseFrameCryptor {
             if (ratchetOpts.ratchetCount < _this.keyProviderOptions.ratchetWindowSize) {
               workerLogger.debug("ratcheting key attempt ".concat(ratchetOpts.ratchetCount, " of ").concat(_this.keyProviderOptions.ratchetWindowSize, ", for kind ").concat(encodedFrame instanceof RTCEncodedAudioFrame ? 'audio' : 'video'));
               let ratchetedKeySet;
+              let ratchetResult;
               if ((initialMaterial !== null && initialMaterial !== void 0 ? initialMaterial : keySet) === _this.keys.getKeySet(keyIndex)) {
                 // only ratchet if the currently set key is still the same as the one used to decrypt this frame
                 // if not, it might be that a different frame has already ratcheted and we try with that one first
-                const newMaterial = yield _this.keys.ratchetKey(keyIndex, false);
-                ratchetedKeySet = yield deriveKeys(newMaterial, _this.keyProviderOptions.ratchetSalt);
+                ratchetResult = yield _this.keys.ratchetKey(keyIndex, false);
+                ratchetedKeySet = yield deriveKeys(ratchetResult.cryptoKey, _this.keyProviderOptions.ratchetSalt);
               }
               const frame = yield _this.decryptFrame(encodedFrame, keyIndex, initialMaterial || keySet, {
                 ratchetCount: ratchetOpts.ratchetCount + 1,
@@ -1430,7 +1437,7 @@ class FrameCryptor extends BaseFrameCryptor {
                 // before updating the keys, make sure that the keySet used for this frame is still the same as the currently set key
                 // if it's not, a new key might have been set already, which we don't want to override
                 if ((initialMaterial !== null && initialMaterial !== void 0 ? initialMaterial : keySet) === _this.keys.getKeySet(keyIndex)) {
-                  _this.keys.setKeySet(ratchetedKeySet, keyIndex, true);
+                  _this.keys.setKeySet(ratchetedKeySet, keyIndex, ratchetResult);
                   // decryption was successful, set the new key index to reflect the ratcheted key set
                   _this.keys.setCurrentKeyIndex(keyIndex);
                 }
@@ -1734,12 +1741,17 @@ class ParticipantKeyHandler extends eventsExports.EventEmitter {
           throw new TypeError("Cannot ratchet key without a valid keyset of participant ".concat(this.participantIdentity));
         }
         const currentMaterial = keySet.material;
-        const newMaterial = yield importKey(yield ratchet(currentMaterial, this.keyProviderOptions.ratchetSalt), currentMaterial.algorithm.name, 'derive');
+        const chainKey = yield ratchet(currentMaterial, this.keyProviderOptions.ratchetSalt);
+        const newMaterial = yield importKey(chainKey, currentMaterial.algorithm.name, 'derive');
+        const ratchetResult = {
+          chainKey,
+          cryptoKey: newMaterial
+        };
         if (setKey) {
-          yield this.setKeyFromMaterial(newMaterial, currentKeyIndex, true);
-          this.emit(KeyHandlerEvent.KeyRatcheted, newMaterial, this.participantIdentity, currentKeyIndex);
+          // Set the new key and emit a ratchet event with the ratcheted chain key
+          yield this.setKeyFromMaterial(newMaterial, currentKeyIndex, ratchetResult);
         }
-        resolve(newMaterial);
+        resolve(ratchetResult);
       } catch (e) {
         reject(e);
       } finally {
@@ -1774,7 +1786,7 @@ class ParticipantKeyHandler extends eventsExports.EventEmitter {
   setKeyFromMaterial(material_1, keyIndex_1) {
     return __awaiter(this, arguments, void 0, function (material, keyIndex) {
       var _this2 = this;
-      let emitRatchetEvent = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+      let ratchetedResult = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
       return function* () {
         const keySet = yield deriveKeys(material, _this2.keyProviderOptions.ratchetSalt);
         const newIndex = keyIndex >= 0 ? keyIndex % _this2.cryptoKeyRing.length : _this2.currentKeyIndex;
@@ -1783,16 +1795,16 @@ class ParticipantKeyHandler extends eventsExports.EventEmitter {
           algorithm: material.algorithm,
           ratchetSalt: _this2.keyProviderOptions.ratchetSalt
         });
-        _this2.setKeySet(keySet, newIndex, emitRatchetEvent);
+        _this2.setKeySet(keySet, newIndex, ratchetedResult);
         if (newIndex >= 0) _this2.currentKeyIndex = newIndex;
       }();
     });
   }
   setKeySet(keySet, keyIndex) {
-    let emitRatchetEvent = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+    let ratchetedResult = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
     this.cryptoKeyRing[keyIndex % this.cryptoKeyRing.length] = keySet;
-    if (emitRatchetEvent) {
-      this.emit(KeyHandlerEvent.KeyRatcheted, keySet.material, this.participantIdentity, keyIndex);
+    if (ratchetedResult) {
+      this.emit(KeyHandlerEvent.KeyRatcheted, ratchetedResult, this.participantIdentity, keyIndex);
     }
   }
   setCurrentKeyIndex(index) {
@@ -2005,13 +2017,13 @@ function setupCryptorErrorEvents(cryptor) {
     postMessage(msg);
   });
 }
-function emitRatchetedKeys(material, participantIdentity, keyIndex) {
+function emitRatchetedKeys(ratchetResult, participantIdentity, keyIndex) {
   const msg = {
     kind: "ratchetKey",
     data: {
       participantIdentity,
       keyIndex,
-      material
+      ratchetResult
     }
   };
   postMessage(msg);

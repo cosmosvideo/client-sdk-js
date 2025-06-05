@@ -72,7 +72,7 @@ export interface RatchetMessage extends BaseMessage {
     data: {
         participantIdentity: string;
         keyIndex?: number;
-        material: CryptoKey;
+        ratchetResult: RatchetResult;
     };
 }
 export interface ErrorMessage extends BaseMessage {
@@ -98,6 +98,10 @@ export type E2EEWorkerMessage = InitMessage | SetKeyMessage | EncodeMessage | Er
 export type KeySet = {
     material: CryptoKey;
     encryptionKey: CryptoKey;
+};
+export type RatchetResult = {
+    chainKey: ArrayBuffer;
+    cryptoKey: CryptoKey;
 };
 export type KeyProviderOptions = {
     sharedKey: boolean;

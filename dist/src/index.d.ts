@@ -4,6 +4,7 @@ import { LogLevel, LoggerNames, getLogger, setLogExtension, setLogLevel } from '
 import DefaultReconnectPolicy from './room/DefaultReconnectPolicy';
 import type { ReconnectContext, ReconnectPolicy } from './room/ReconnectPolicy';
 import Room, { ConnectionState } from './room/Room';
+import * as attributes from './room/attribute-typings';
 import LocalParticipant from './room/participant/LocalParticipant';
 import Participant, { ConnectionQuality, ParticipantKind } from './room/participant/Participant';
 import type { ParticipantTrackPermission } from './room/participant/ParticipantTrackPermission';
@@ -42,6 +43,9 @@ export type * from './room/StreamReader';
 export type * from './room/StreamWriter';
 export type { DataPublishOptions, SimulationScenario, TranscriptionSegment, ChatMessage, SendTextOptions, } from './room/types';
 export * from './version';
-export { ConnectionQuality, ConnectionState, CriticalTimers, DataPacket_Kind, DefaultReconnectPolicy, DisconnectReason, LocalAudioTrack, LocalParticipant, LocalTrack, LocalTrackPublication, LocalVideoTrack, LogLevel, LoggerNames, Participant, RemoteAudioTrack, RemoteParticipant, ParticipantKind, RemoteTrack, RemoteTrackPublication, RemoteVideoTrack, Room, SubscriptionError, TrackPublication, TrackType, compareVersions, createAudioAnalyser, getBrowser, getEmptyAudioStreamTrack, getEmptyVideoStreamTrack, getLogger, isBrowserSupported, setLogExtension, setLogLevel, supportsAV1, supportsAdaptiveStream, supportsDynacast, supportsVP9, Mutex, isAudioTrack, isLocalTrack, isRemoteTrack, isVideoTrack, isLocalParticipant, isRemoteParticipant, };
+export { 
+/** @internal */
+attributes, ConnectionQuality, ConnectionState, CriticalTimers, DataPacket_Kind, DefaultReconnectPolicy, DisconnectReason, LocalAudioTrack, LocalParticipant, LocalTrack, LocalTrackPublication, LocalVideoTrack, LogLevel, LoggerNames, Participant, RemoteAudioTrack, RemoteParticipant, ParticipantKind, RemoteTrack, RemoteTrackPublication, RemoteVideoTrack, Room, SubscriptionError, TrackPublication, TrackType, compareVersions, createAudioAnalyser, getBrowser, getEmptyAudioStreamTrack, getEmptyVideoStreamTrack, getLogger, isBrowserSupported, setLogExtension, setLogLevel, supportsAV1, supportsAdaptiveStream, supportsDynacast, supportsVP9, Mutex, isAudioTrack, isLocalTrack, isRemoteTrack, isVideoTrack, isLocalParticipant, isRemoteParticipant, };
 export type { AudioAnalyserOptions, ElementInfo, LiveKitReactNativeInfo, ParticipantTrackPermission, AudioReceiverStats, AudioSenderStats, VideoReceiverStats, VideoSenderStats, ReconnectContext, ReconnectPolicy, };
+export { LocalTrackRecorder } from './room/track/record';
 //# sourceMappingURL=index.d.ts.map

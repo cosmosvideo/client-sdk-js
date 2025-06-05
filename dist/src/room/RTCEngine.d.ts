@@ -1,4 +1,4 @@
-import { type AddTrackRequest, type ConnectionQualityUpdate, DataPacket, DataPacket_Kind, DisconnectReason, type JoinResponse, ParticipantInfo, RequestResponse, Room as RoomModel, SpeakerInfo, type StreamStateUpdate, SubscribedQualityUpdate, type SubscriptionPermissionUpdate, type SubscriptionResponse, TrackInfo, TrackUnpublishedResponse, Transcription } from '@livekit/protocol';
+import { type AddTrackRequest, type ConnectionQualityUpdate, DataPacket, DataPacket_Kind, DisconnectReason, type JoinResponse, ParticipantInfo, RequestResponse, Room as RoomModel, RoomMovedResponse, SpeakerInfo, type StreamStateUpdate, SubscribedQualityUpdate, type SubscriptionPermissionUpdate, type SubscriptionResponse, TrackInfo, TrackUnpublishedResponse, Transcription } from '@livekit/protocol';
 import type TypedEventEmitter from 'typed-emitter';
 import type { SignalOptions } from '../api/SignalClient';
 import { SignalClient } from '../api/SignalClient';
@@ -152,6 +152,7 @@ export type EngineEventCallbacks = {
     dcBufferStatusChanged: (isLow: boolean, kind: DataPacket_Kind) => void;
     participantUpdate: (infos: ParticipantInfo[]) => void;
     roomUpdate: (room: RoomModel) => void;
+    roomMoved: (room: RoomMovedResponse) => void;
     connectionQualityUpdate: (update: ConnectionQualityUpdate) => void;
     speakersChanged: (speakerUpdates: SpeakerInfo[]) => void;
     streamStateChanged: (update: StreamStateUpdate) => void;
@@ -163,6 +164,7 @@ export type EngineEventCallbacks = {
     remoteMute: (trackSid: string, muted: boolean) => void;
     offline: () => void;
     signalRequestResponse: (response: RequestResponse) => void;
+    signalConnected: (joinResp: JoinResponse) => void;
 };
 export {};
 //# sourceMappingURL=RTCEngine.d.ts.map

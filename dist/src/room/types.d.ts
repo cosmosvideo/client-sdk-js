@@ -17,6 +17,7 @@ export interface SendTextOptions {
     destinationIdentities?: Array<string>;
     attachments?: Array<File>;
     onProgress?: (progress: number) => void;
+    attributes?: Record<string, string>;
 }
 export interface StreamTextOptions {
     topic?: string;
@@ -27,6 +28,7 @@ export interface StreamTextOptions {
     attachedStreamIds?: Array<string>;
     replyToStreamId?: string;
     totalSize?: number;
+    attributes?: Record<string, string>;
 }
 export type DataPublishOptions = {
     /**

@@ -1,3 +1,4 @@
+import type { LoggerOptions } from '../types';
 import LocalAudioTrack from './LocalAudioTrack';
 import type LocalTrack from './LocalTrack';
 import LocalVideoTrack from './LocalVideoTrack';
@@ -8,7 +9,7 @@ import type { AudioCaptureOptions, CreateLocalTracksOptions, ScreenShareCaptureO
  * the user instead of two separate ones.
  * @param options
  */
-export declare function createLocalTracks(options?: CreateLocalTracksOptions): Promise<Array<LocalTrack>>;
+export declare function createLocalTracks(options?: CreateLocalTracksOptions, loggerOptions?: LoggerOptions): Promise<Array<LocalTrack>>;
 /**
  * Creates a [[LocalVideoTrack]] with getUserMedia()
  * @param options

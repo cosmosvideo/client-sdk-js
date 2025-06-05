@@ -55,7 +55,7 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
      * @internal
      * Sets layers that should be publishing
      */
-    setPublishingLayers(qualities: SubscribedQuality[]): Promise<void>;
+    setPublishingLayers(isSvc: boolean, qualities: SubscribedQuality[]): Promise<void>;
     protected monitorSender: () => Promise<void>;
     protected handleAppVisibilityChanged(): Promise<void>;
 }

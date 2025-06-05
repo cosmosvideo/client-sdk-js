@@ -1,4 +1,4 @@
-import { AddTrackRequest, AudioTrackFeature, ConnectionQualityUpdate, JoinResponse, LeaveRequest, ParticipantInfo, ReconnectReason, ReconnectResponse, RequestResponse, Room, SessionDescription, SignalRequest, SignalTarget, SimulateScenario, SpeakerInfo, StreamStateUpdate, SubscribedQualityUpdate, SubscriptionPermissionUpdate, SubscriptionResponse, SyncState, TrackPermission, TrackPublishedResponse, TrackUnpublishedResponse, UpdateSubscription, UpdateTrackSettings, VideoLayer } from '@livekit/protocol';
+import { AddTrackRequest, AudioTrackFeature, ConnectionQualityUpdate, JoinResponse, LeaveRequest, ParticipantInfo, ReconnectReason, ReconnectResponse, RequestResponse, Room, RoomMovedResponse, SessionDescription, SignalRequest, SignalTarget, SimulateScenario, SpeakerInfo, StreamStateUpdate, SubscribedQualityUpdate, SubscriptionPermissionUpdate, SubscriptionResponse, SyncState, TrackPermission, TrackPublishedResponse, TrackUnpublishedResponse, UpdateSubscription, UpdateTrackSettings, VideoLayer } from '@livekit/protocol';
 import type { LoggerOptions } from '../room/types';
 import { AsyncQueue } from '../utils/AsyncQueue';
 interface ConnectOpts extends SignalOptions {
@@ -53,6 +53,7 @@ export declare class SignalClient {
     onLeave?: (leave: LeaveRequest) => void;
     onRequestResponse?: (response: RequestResponse) => void;
     onLocalTrackSubscribed?: (trackSid: string) => void;
+    onRoomMoved?: (res: RoomMovedResponse) => void;
     connectOptions?: ConnectOpts;
     ws?: WebSocket;
     get currentState(): SignalConnectionState;

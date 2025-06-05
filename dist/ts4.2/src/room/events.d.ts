@@ -46,6 +46,15 @@ export declare enum RoomEvent {
      */
     ConnectionStateChanged = "connectionStateChanged",
     /**
+     * When participant has been moved to a different room by the service request.
+     * The behavior looks like the participant has been disconnected and reconnected to a different room
+     * seamlessly without connection state transition.
+     * A new token will be provided for reconnecting to the new room if needed.
+     *
+     * args: ([[room: string, token: string]])
+     */
+    Moved = "moved",
+    /**
      * When input or output devices on the machine have changed.
      */
     MediaDevicesChanged = "mediaDevicesChanged",
@@ -169,6 +178,12 @@ export declare enum RoomEvent {
      * args: (changedAttributes: [[Record<string, string]], participant: [[Participant]])
      */
     ParticipantAttributesChanged = "participantAttributesChanged",
+    /**
+     * Emitted when the participant's state changes to ACTIVE and is ready to send/receive data messages
+     *
+     * args: (participant: [[Participant]])
+     */
+    ParticipantActive = "participantActive",
     /**
      * Room metadata is a simple way for app-specific state to be pushed to
      * all users.
@@ -463,7 +478,11 @@ export declare enum ParticipantEvent {
      */
     LocalTrackSubscribed = "localTrackSubscribed",
     /** only emitted on local participant */
-    ChatMessage = "chatMessage"
+    ChatMessage = "chatMessage",
+    /**
+     * Emitted when the participant's state changes to ACTIVE and is ready to send/receive data messages
+     */
+    Active = "active"
 }
 /** @internal */
 export declare enum EngineEvent {
@@ -494,7 +513,9 @@ export declare enum EngineEvent {
     LocalTrackUnpublished = "localTrackUnpublished",
     LocalTrackSubscribed = "localTrackSubscribed",
     Offline = "offline",
-    SignalRequestResponse = "signalRequestResponse"
+    SignalRequestResponse = "signalRequestResponse",
+    SignalConnected = "signalConnected",
+    RoomMoved = "roomMoved"
 }
 export declare enum TrackEvent {
     Message = "message",
@@ -570,6 +591,10 @@ export declare enum TrackEvent {
     /**
      * @experimental
      */
-    TimeSyncUpdate = "timeSyncUpdate"
+    TimeSyncUpdate = "timeSyncUpdate",
+    /**
+     * @internal
+     */
+    PreConnectBufferFlushed = "preConnectBufferFlushed"
 }
 //# sourceMappingURL=events.d.ts.map

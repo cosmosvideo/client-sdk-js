@@ -1,2 +1,2 @@
-export declare function cloneDeep<T>(value: T): T | undefined;
+export declare function cloneDeep<T>(value: T): T;
 //# sourceMappingURL=cloneDeep.d.ts.map

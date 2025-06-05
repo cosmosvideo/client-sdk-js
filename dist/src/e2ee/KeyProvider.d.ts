@@ -1,6 +1,6 @@
 import type TypedEventEmitter from 'typed-emitter';
 import { type KeyProviderCallbacks } from './events';
-import type { KeyInfo, KeyProviderOptions } from './types';
+import type { KeyInfo, KeyProviderOptions, RatchetResult } from './types';
 declare const BaseKeyProvider_base: new () => TypedEventEmitter<KeyProviderCallbacks>;
 /**
  * @experimental
@@ -17,12 +17,15 @@ export declare class BaseKeyProvider extends BaseKeyProvider_base {
      */
     protected onSetEncryptionKey(key: CryptoKey, participantIdentity?: string, keyIndex?: number): void;
     /**
-     * callback being invoked after a ratchet request has been performed on a participant
-     * that surfaces the new key material.
-     * @param material
+     * Callback being invoked after a key has been ratcheted.
+     * Can happen when:
+     * - A decryption failure occurs and the key is auto-ratcheted
+     * - A ratchet request is sent (see {@link ratchetKey()})
+     * @param ratchetResult Contains the ratcheted chain key (exportable to other participants) and the derived new key material.
+     * @param participantId
      * @param keyIndex
      */
-    protected onKeyRatcheted: (material: CryptoKey, keyIndex?: number) => void;
+    protected onKeyRatcheted: (ratchetResult: RatchetResult, participantId?: string, keyIndex?: number) => void;
     getKeys(): KeyInfo[];
     getOptions(): KeyProviderOptions;
     ratchetKey(participantIdentity?: string, keyIndex?: number): void;

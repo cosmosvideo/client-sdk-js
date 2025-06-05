@@ -145,6 +145,7 @@ export type TrackEventCallbacks = {
         timestamp: number;
         rtpTimestamp: number;
     }) => void;
+    preConnectBufferFlushed: (buffer: Uint8Array[]) => void;
 };
 export {};
 //# sourceMappingURL=Track.d.ts.map
