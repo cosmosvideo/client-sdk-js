@@ -2095,6 +2095,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
       }
     }
+    this.emit(RoomEvent.MediaDevicesChanged);
   }, 500);
 
   private handleRoomUpdate = (room: RoomModel) => {

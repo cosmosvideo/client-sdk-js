@@ -23295,6 +23295,7 @@ class Room extends eventsExports.EventEmitter {
           yield this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
         }
       }
+      this.emit(RoomEvent.MediaDevicesChanged);
     }), 500);
     this.handleRoomUpdate = room => {
       const oldRoom = this.roomInfo;
