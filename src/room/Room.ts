@@ -2045,7 +2045,16 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         // FF doesn't emit an event when the default device changes, so we perform the same best effort and switch to the new device once connected and if it's the first in the array
         if (devicesOfKind.length > 0 && devicesOfKind[0]?.deviceId !== activeDevice) {
           console.log('switching to first device', devicesOfKind[0].deviceId);
-          await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+          try {
+            await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+          } catch (error) {
+            await this.switchActiveDevice(kind, activeDevice);
+            this.log.warn(`Failed to switch to first available device for ${kind}`, {
+              ...this.logContext,
+              error,
+              deviceId: devicesOfKind[0].deviceId,
+            });
+          }
           continue;
         }
       }
@@ -2060,7 +2069,15 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         !devicesOfKind.find((deviceInfo) => deviceInfo.deviceId === this.getActiveDevice(kind))
       ) {
         console.log('switching to second device', devicesOfKind[0].deviceId);
-        await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+        try {
+          await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+        } catch (error) {
+          this.log.warn(`Failed to switch to fallback device for ${kind}`, {
+            ...this.logContext,
+            error,
+            deviceId: devicesOfKind[0].deviceId,
+          });
+        }
       }
     }
 
