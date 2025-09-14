@@ -14448,6 +14448,33 @@ class PCTransport extends eventsExports.EventEmitter {
         } = extractStereoAndNackAudioFromOffer(sd);
         this.remoteStereoMids = stereoMids;
         this.remoteNackMids = nackMids;
+        // For Firefox, strip AV1 from remote offer SDP to avoid AV1 usage
+        if (isFireFox() && sd.sdp) {
+          const sdpParsed = libExports.parse(sd.sdp);
+          sdpParsed.media.forEach(media => {
+            var _a, _b, _c, _d, _e, _f;
+            if (media.type === 'video') {
+              // remove AV1 codec entries from m= line payloads and rtp/fmtp sections
+              const av1Payloads = [];
+              media.rtp = (_b = (_a = media.rtp) === null || _a === void 0 ? void 0 : _a.filter(rtp => {
+                const isAv1 = rtp.codec.toUpperCase() === 'AV1';
+                if (isAv1) av1Payloads.push(rtp.payload);
+                return !isAv1;
+              })) !== null && _b !== void 0 ? _b : [];
+              if (av1Payloads.length > 0) {
+                // filter fmtp and rtcpFb tied to AV1 payloads
+                media.fmtp = (_d = (_c = media.fmtp) === null || _c === void 0 ? void 0 : _c.filter(f => !av1Payloads.includes(f.payload))) !== null && _d !== void 0 ? _d : [];
+                media.rtcpFb = (_f = (_e = media.rtcpFb) === null || _e === void 0 ? void 0 : _e.filter(f => !av1Payloads.includes(f.payload))) !== null && _f !== void 0 ? _f : [];
+                // update payloads list on m line
+                if (typeof media.payloads === 'string') {
+                  const list = media.payloads.split(' ').map(v => parseInt(v, 10)).filter(v => !Number.isNaN(v) && !av1Payloads.includes(v));
+                  media.payloads = list.join(' ');
+                }
+              }
+            }
+          });
+          mungedSDP = libExports.write(sdpParsed);
+        }
       } else if (sd.type === 'answer') {
         const sdpParsed = libExports.parse((_a = sd.sdp) !== null && _a !== void 0 ? _a : '');
         sdpParsed.media.forEach(media => {
@@ -14491,6 +14518,28 @@ class PCTransport extends eventsExports.EventEmitter {
             });
           }
         });
+        // For Firefox, also remove AV1 from remote answer SDP
+        if (isFireFox()) {
+          sdpParsed.media.forEach(media => {
+            var _a, _b, _c, _d, _e, _f;
+            if (media.type === 'video') {
+              const av1Payloads = [];
+              media.rtp = (_b = (_a = media.rtp) === null || _a === void 0 ? void 0 : _a.filter(rtp => {
+                const isAv1 = rtp.codec.toUpperCase() === 'AV1';
+                if (isAv1) av1Payloads.push(rtp.payload);
+                return !isAv1;
+              })) !== null && _b !== void 0 ? _b : [];
+              if (av1Payloads.length > 0) {
+                media.fmtp = (_d = (_c = media.fmtp) === null || _c === void 0 ? void 0 : _c.filter(f => !av1Payloads.includes(f.payload))) !== null && _d !== void 0 ? _d : [];
+                media.rtcpFb = (_f = (_e = media.rtcpFb) === null || _e === void 0 ? void 0 : _e.filter(f => !av1Payloads.includes(f.payload))) !== null && _f !== void 0 ? _f : [];
+                if (typeof media.payloads === 'string') {
+                  const list = media.payloads.split(' ').map(v => parseInt(v, 10)).filter(v => !Number.isNaN(v) && !av1Payloads.includes(v));
+                  media.payloads = list.join(' ');
+                }
+              }
+            }
+          });
+        }
         mungedSDP = libExports.write(sdpParsed);
       }
       yield this.setMungedSDP(sd, mungedSDP, true);
@@ -14549,10 +14598,28 @@ class PCTransport extends eventsExports.EventEmitter {
       }, this.logContext));
       const sdpParsed = libExports.parse((_a = offer.sdp) !== null && _a !== void 0 ? _a : '');
       sdpParsed.media.forEach(media => {
+        var _a, _b, _c, _d, _e, _f;
         ensureIPAddrMatchVersion(media);
         if (media.type === 'audio') {
           ensureAudioNackAndStereo(media, [], []);
         } else if (media.type === 'video') {
+          // On Firefox, strip AV1 from local offer capabilities to avoid AV1 negotiation
+          if (isFireFox()) {
+            const av1Payloads = [];
+            media.rtp = (_b = (_a = media.rtp) === null || _a === void 0 ? void 0 : _a.filter(rtp => {
+              const isAv1 = rtp.codec.toUpperCase() === 'AV1';
+              if (isAv1) av1Payloads.push(rtp.payload);
+              return !isAv1;
+            })) !== null && _b !== void 0 ? _b : [];
+            if (av1Payloads.length > 0) {
+              media.fmtp = (_d = (_c = media.fmtp) === null || _c === void 0 ? void 0 : _c.filter(f => !av1Payloads.includes(f.payload))) !== null && _d !== void 0 ? _d : [];
+              media.rtcpFb = (_f = (_e = media.rtcpFb) === null || _e === void 0 ? void 0 : _e.filter(f => !av1Payloads.includes(f.payload))) !== null && _f !== void 0 ? _f : [];
+              if (typeof media.payloads === 'string') {
+                const list = media.payloads.split(' ').map(v => parseInt(v, 10)).filter(v => !Number.isNaN(v) && !av1Payloads.includes(v));
+                media.payloads = list.join(' ');
+              }
+            }
+          }
           this.trackBitrates.some(trackbr => {
             if (!media.msid || !trackbr.cid || !media.msid.includes(trackbr.cid)) {
               return false;

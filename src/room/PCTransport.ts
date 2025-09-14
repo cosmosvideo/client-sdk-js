@@ -5,7 +5,7 @@ import { debounce } from 'ts-debounce';
 import log, { LoggerNames, getLogger } from '../logger';
 import { NegotiationError, UnexpectedConnectionState } from './errors';
 import type { LoggerOptions } from './types';
-import { ddExtensionURI, isSVCCodec } from './utils';
+import { ddExtensionURI, isSVCCodec, isFireFox } from './utils';
 
 /** @internal */
 interface TrackBitrateInfo {
@@ -143,6 +143,35 @@ export default class PCTransport extends EventEmitter {
       let { stereoMids, nackMids } = extractStereoAndNackAudioFromOffer(sd);
       this.remoteStereoMids = stereoMids;
       this.remoteNackMids = nackMids;
+      // For Firefox, strip AV1 from remote offer SDP to avoid AV1 usage
+      if (isFireFox() && sd.sdp) {
+        const sdpParsed = parse(sd.sdp);
+        sdpParsed.media.forEach((media) => {
+          if (media.type === 'video') {
+            // remove AV1 codec entries from m= line payloads and rtp/fmtp sections
+            const av1Payloads: number[] = [];
+            media.rtp = media.rtp?.filter((rtp) => {
+              const isAv1 = rtp.codec.toUpperCase() === 'AV1';
+              if (isAv1) av1Payloads.push(rtp.payload);
+              return !isAv1;
+            }) ?? [];
+            if (av1Payloads.length > 0) {
+              // filter fmtp and rtcpFb tied to AV1 payloads
+              media.fmtp = media.fmtp?.filter((f) => !av1Payloads.includes(f.payload)) ?? [];
+              media.rtcpFb = media.rtcpFb?.filter((f) => !av1Payloads.includes(f.payload)) ?? [];
+              // update payloads list on m line
+              if (typeof media.payloads === 'string') {
+                const list = media.payloads
+                  .split(' ')
+                  .map((v) => parseInt(v, 10))
+                  .filter((v) => !Number.isNaN(v) && !av1Payloads.includes(v));
+                media.payloads = list.join(' ');
+              }
+            }
+          }
+        });
+        mungedSDP = write(sdpParsed);
+      }
     } else if (sd.type === 'answer') {
       const sdpParsed = parse(sd.sdp ?? '');
       sdpParsed.media.forEach((media) => {
@@ -194,6 +223,30 @@ export default class PCTransport extends EventEmitter {
           });
         }
       });
+      // For Firefox, also remove AV1 from remote answer SDP
+      if (isFireFox()) {
+        sdpParsed.media.forEach((media) => {
+          if (media.type === 'video') {
+            const av1Payloads: number[] = [];
+            media.rtp = media.rtp?.filter((rtp) => {
+              const isAv1 = rtp.codec.toUpperCase() === 'AV1';
+              if (isAv1) av1Payloads.push(rtp.payload);
+              return !isAv1;
+            }) ?? [];
+            if (av1Payloads.length > 0) {
+              media.fmtp = media.fmtp?.filter((f) => !av1Payloads.includes(f.payload)) ?? [];
+              media.rtcpFb = media.rtcpFb?.filter((f) => !av1Payloads.includes(f.payload)) ?? [];
+              if (typeof media.payloads === 'string') {
+                const list = media.payloads
+                  .split(' ')
+                  .map((v) => parseInt(v, 10))
+                  .filter((v) => !Number.isNaN(v) && !av1Payloads.includes(v));
+                media.payloads = list.join(' ');
+              }
+            }
+          }
+        });
+      }
       mungedSDP = write(sdpParsed);
     }
     await this.setMungedSDP(sd, mungedSDP, true);
@@ -272,6 +325,26 @@ export default class PCTransport extends EventEmitter {
       if (media.type === 'audio') {
         ensureAudioNackAndStereo(media, [], []);
       } else if (media.type === 'video') {
+        // On Firefox, strip AV1 from local offer capabilities to avoid AV1 negotiation
+        if (isFireFox()) {
+          const av1Payloads: number[] = [];
+          media.rtp = media.rtp?.filter((rtp) => {
+            const isAv1 = rtp.codec.toUpperCase() === 'AV1';
+            if (isAv1) av1Payloads.push(rtp.payload);
+            return !isAv1;
+          }) ?? [];
+          if (av1Payloads.length > 0) {
+            media.fmtp = media.fmtp?.filter((f) => !av1Payloads.includes(f.payload)) ?? [];
+            media.rtcpFb = media.rtcpFb?.filter((f) => !av1Payloads.includes(f.payload)) ?? [];
+            if (typeof media.payloads === 'string') {
+              const list = media.payloads
+                .split(' ')
+                .map((v) => parseInt(v, 10))
+                .filter((v) => !Number.isNaN(v) && !av1Payloads.includes(v));
+              media.payloads = list.join(' ');
+            }
+          }
+        }
         this.trackBitrates.some((trackbr): boolean => {
           if (!media.msid || !trackbr.cid || !media.msid.includes(trackbr.cid)) {
             return false;
