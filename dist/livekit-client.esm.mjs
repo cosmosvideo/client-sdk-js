@@ -20594,6 +20594,7 @@ class LocalParticipant extends Participant {
   unpublishTrack(track, stopOnUnpublish) {
     return __awaiter(this, void 0, void 0, function* () {
       var _a, _b;
+      console.log("[test] unpublishTrack");
       if (isLocalTrack(track)) {
         const publishPromise = this.pendingPublishPromises.get(track);
         if (publishPromise) {
@@ -20636,6 +20637,8 @@ class LocalParticipant extends Participant {
             // the transceiver to inactive
             if (transceiver.sender === trackSender) {
               transceiver.direction = 'inactive';
+              console.log("[test] stopping transceiver");
+              transceiver.stop();
               negotiationNeeded = true;
             }
           }

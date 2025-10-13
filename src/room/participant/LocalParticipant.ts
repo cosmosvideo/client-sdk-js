@@ -1253,6 +1253,7 @@ export default class LocalParticipant extends Participant {
     track: LocalTrack | MediaStreamTrack,
     stopOnUnpublish?: boolean,
   ): Promise<LocalTrackPublication | undefined> {
+    console.log("[test] unpublishTrack");
     if (isLocalTrack(track)) {
       const publishPromise = this.pendingPublishPromises.get(track);
       if (publishPromise) {
@@ -1314,6 +1315,10 @@ export default class LocalParticipant extends Participant {
           // the transceiver to inactive
           if (transceiver.sender === trackSender) {
             transceiver.direction = 'inactive';
+
+            console.log("[test] stopping transceiver");
+            transceiver.stop();
+            
             negotiationNeeded = true;
           }
         }
