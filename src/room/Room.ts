@@ -31,6 +31,7 @@ import {
   protoInt64,
 } from '@livekit/protocol';
 import { EventEmitter } from 'events';
+import { debounce } from 'ts-debounce';
 import type TypedEmitter from 'typed-emitter';
 import 'webrtc-adapter';
 import { EncryptionEvent } from '../e2ee';
@@ -106,8 +107,6 @@ import {
   unpackStreamId,
   unwrapConstraint,
 } from './utils';
-
-import { debounce } from 'ts-debounce';
 
 export enum ConnectionState {
   Disconnected = 'disconnected',
@@ -1953,7 +1952,8 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       console.log('sdk>> previousDevices', previousDevices);
       for (let availableDevice of availableDevices) {
         const previousDevice = previousDevices.find(
-          (info) => info.deviceId === availableDevice.deviceId && info.kind === availableDevice.kind
+          (info) =>
+            info.deviceId === availableDevice.deviceId && info.kind === availableDevice.kind,
         );
         if (
           previousDevice &&
@@ -1964,44 +1964,43 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         ) {
           // label has changed on device the same deviceId, indicating that the default device has changed on the OS level
           if (this.getActiveDevice(availableDevice.kind) === 'default') {
-              const previousDefaultDevice = previousDevices.find(
-                (info) => info.kind === availableDevice.kind && previousDevice.label.includes(info.label) && info.deviceId !== previousDevice.deviceId
+            const previousDefaultDevice = previousDevices.find(
+              (info) =>
+                info.kind === availableDevice.kind &&
+                previousDevice.label.includes(info.label) &&
+                info.deviceId !== previousDevice.deviceId,
+            );
+            // check if the previous default device is available
+            if (previousDefaultDevice) {
+              const previousDefaultDeviceAvailable = availableDevices.find(
+                (info) => previousDefaultDevice?.deviceId === info.deviceId,
               );
-              // check if the previous default device is available
-              if(previousDefaultDevice){
-                const previousDefaultDeviceAvailable = availableDevices.find(
-                  (info) => previousDefaultDevice?.deviceId === info.deviceId
+              if (previousDefaultDeviceAvailable) {
+                console.log('sdk>> 1st event', availableDevice, previousDevice);
+                this.emit(
+                  RoomEvent.RequestDefaultMicSwitch,
+                  availableDevice.kind,
+                  previousDefaultDevice.deviceId,
                 );
-                if(previousDefaultDeviceAvailable){
-                  console.log("sdk>> 1st event", availableDevice, previousDevice);
-                  this.emit(
-                    RoomEvent.RequestDefaultMicSwitch,
-                    availableDevice.kind,
-                    previousDefaultDevice.deviceId
-                  );
-                }else{
-                  this.emit(
-                    RoomEvent.ActiveDeviceChanged,
-                    availableDevice.kind,
-                    availableDevice.deviceId,
-                  );
-                }
-              }else{
+              } else {
                 this.emit(
                   RoomEvent.ActiveDeviceChanged,
                   availableDevice.kind,
                   availableDevice.deviceId,
                 );
               }
-          }else{
-            console.log("sdk>> 2nd event", availableDevice, previousDevice);
-            const activeDeviceId = this.getActiveDevice(availableDevice.kind);
-            if(activeDeviceId){
+            } else {
               this.emit(
-                RoomEvent.RequestDefaultMicSwitch,
+                RoomEvent.ActiveDeviceChanged,
                 availableDevice.kind,
-                activeDeviceId,
+                availableDevice.deviceId,
               );
+            }
+          } else {
+            console.log('sdk>> 2nd event', availableDevice, previousDevice);
+            const activeDeviceId = this.getActiveDevice(availableDevice.kind);
+            if (activeDeviceId) {
+              this.emit(RoomEvent.RequestDefaultMicSwitch, availableDevice.kind, activeDeviceId);
             }
           }
         }
@@ -2024,7 +2023,16 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         // FF doesn't emit an event when the default device changes, so we perform the same best effort and switch to the new device once connected and if it's the first in the array
         if (devicesOfKind.length > 0 && devicesOfKind[0]?.deviceId !== activeDevice) {
           console.log('switching to first device', devicesOfKind[0].deviceId);
-          await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+          try {
+            await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+          } catch (error) {
+            await this.switchActiveDevice(kind, activeDevice);
+            this.log.warn(`Failed to switch to first available device for ${kind}`, {
+              ...this.logContext,
+              error,
+              deviceId: devicesOfKind[0].deviceId,
+            });
+          }
           continue;
         }
       }
@@ -2041,7 +2049,15 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         (kind !== 'audiooutput' || !isSafariBased())
       ) {
         console.log('switching to second device', devicesOfKind[0].deviceId);
-        await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+        try {
+          await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
+        } catch (error) {
+          this.log.warn(`Failed to switch to fallback device for ${kind}`, {
+            ...this.logContext,
+            error,
+            deviceId: devicesOfKind[0].deviceId,
+          });
+        }
       }
     }
     this.emit(RoomEvent.MediaDevicesChanged);
@@ -2717,7 +2733,7 @@ export type RoomEventCallbacks = {
   encryptionError: (error: Error) => void;
   dcBufferStatusChanged: (isLow: boolean, kind: DataPacket_Kind) => void;
   activeDeviceChanged: (kind: MediaDeviceKind, deviceId: string) => void;
-  requestDefaultMicSwitch: (kind: MediaDeviceKind,deviceId: string) => void;
+  requestDefaultMicSwitch: (kind: MediaDeviceKind, deviceId: string) => void;
   chatMessage: (message: ChatMessage, participant?: RemoteParticipant | LocalParticipant) => void;
   localTrackSubscribed: (publication: LocalTrackPublication, participant: LocalParticipant) => void;
   metricsReceived: (metrics: MetricsBatch, participant?: Participant) => void;
