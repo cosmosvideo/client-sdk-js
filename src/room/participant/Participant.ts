@@ -1,5 +1,6 @@
 import {
   DataPacket_Kind,
+  Encryption_Type,
   ParticipantInfo,
   ParticipantInfo_State,
   ParticipantInfo_Kind as ParticipantKind,
@@ -13,6 +14,7 @@ import type TypedEmitter from 'typed-emitter';
 import log, { LoggerNames, type StructuredLogger, getLogger } from '../../logger';
 import { ParticipantEvent, TrackEvent } from '../events';
 import type LocalTrackPublication from '../track/LocalTrackPublication';
+import type LocalVideoTrack from '../track/LocalVideoTrack';
 import type RemoteTrack from '../track/RemoteTrack';
 import type RemoteTrackPublication from '../track/RemoteTrackPublication';
 import { Track } from '../track/Track';
@@ -403,9 +405,15 @@ export type ParticipantEventCallbacks = {
   trackUnmuted: (publication: TrackPublication) => void;
   localTrackPublished: (publication: LocalTrackPublication) => void;
   localTrackUnpublished: (publication: LocalTrackPublication) => void;
+  localTrackCpuConstrained: (track: LocalVideoTrack, publication: LocalTrackPublication) => void;
+  localSenderCreated: (sender: RTCRtpSender, track: Track) => void;
   participantMetadataChanged: (prevMetadata: string | undefined, participant?: any) => void;
   participantNameChanged: (name: string) => void;
-  dataReceived: (payload: Uint8Array, kind: DataPacket_Kind) => void;
+  dataReceived: (
+    payload: Uint8Array,
+    kind: DataPacket_Kind,
+    encryptionType?: Encryption_Type,
+  ) => void;
   sipDTMFReceived: (dtmf: SipDTMF) => void;
   transcriptionReceived: (
     transcription: TranscriptionSegment[],

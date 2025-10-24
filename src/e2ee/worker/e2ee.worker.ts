@@ -5,14 +5,18 @@ import { KEY_PROVIDER_DEFAULTS } from '../constants';
 import { CryptorErrorReason } from '../errors';
 import { CryptorEvent, KeyHandlerEvent } from '../events';
 import type {
+  DecryptDataResponseMessage,
   E2EEWorkerMessage,
+  EncryptDataResponseMessage,
   ErrorMessage,
   InitAck,
   KeyProviderOptions,
   RatchetMessage,
   RatchetRequestMessage,
   RatchetResult,
+  ScriptTransformOptions,
 } from '../types';
+import { DataCryptor } from './DataCryptor';
 import { FrameCryptor, encryptionEnabledMap } from './FrameCryptor';
 import { ParticipantKeyHandler } from './ParticipantKeyHandler';
 
@@ -65,6 +69,7 @@ onmessage = (ev) => {
           data.readableStream,
           data.writableStream,
           data.trackId,
+          data.isReuse,
           data.codec,
         );
         break;
@@ -75,9 +80,54 @@ onmessage = (ev) => {
           data.readableStream,
           data.writableStream,
           data.trackId,
+          data.isReuse,
           data.codec,
         );
         break;
+
+      case 'encryptDataRequest':
+        const {
+          payload: encryptedPayload,
+          iv,
+          keyIndex,
+        } = await DataCryptor.encrypt(
+          data.payload,
+          getParticipantKeyHandler(data.participantIdentity),
+        );
+        console.log('encrypted payload', {
+          original: data.payload,
+          encrypted: encryptedPayload,
+          iv,
+        });
+        postMessage({
+          kind: 'encryptDataResponse',
+          data: {
+            payload: encryptedPayload,
+            iv,
+            keyIndex,
+            uuid: data.uuid,
+          },
+        } satisfies EncryptDataResponseMessage);
+        break;
+
+      case 'decryptDataRequest':
+        const { payload: decryptedPayload } = await DataCryptor.decrypt(
+          data.payload,
+          data.iv,
+          getParticipantKeyHandler(data.participantIdentity),
+          data.keyIndex,
+        );
+        console.log('decrypted payload', {
+          original: data.payload,
+          decrypted: decryptedPayload,
+          iv: data.iv,
+        });
+        postMessage({
+          kind: 'decryptDataResponse',
+          data: { payload: decryptedPayload, uuid: data.uuid },
+        } satisfies DecryptDataResponseMessage);
+        break;
+
       case 'setKey':
         if (useSharedKey) {
           await setSharedKey(data.key, data.keyIndex);
@@ -95,6 +145,11 @@ onmessage = (ev) => {
         break;
       case 'updateCodec':
         getTrackCryptor(data.participantIdentity, data.trackId).setVideoCodec(data.codec);
+        workerLogger.info('updated codec', {
+          participantIdentity: data.participantIdentity,
+          trackId: data.trackId,
+          codec: data.codec,
+        });
         break;
       case 'setRTPMap':
         // this is only used for the local participant
@@ -148,7 +203,7 @@ function getTrackCryptor(participantIdentity: string, trackId: string) {
   }
   let cryptor = cryptors[0];
   if (!cryptor) {
-    workerLogger.info('creating new cryptor for', { participantIdentity });
+    workerLogger.info('creating new cryptor for', { participantIdentity, trackId });
     if (!keyProviderOptions) {
       throw Error('Missing keyProvider options');
     }
@@ -259,14 +314,14 @@ if (self.RTCTransformEvent) {
   workerLogger.debug('setup transform event');
   // @ts-ignore
   self.onrtctransform = (event: RTCTransformEvent) => {
-    // @ts-ignore .transformer property is part of RTCTransformEvent
+    // @ts-ignore
     const transformer = event.transformer;
     workerLogger.debug('transformer', transformer);
-    // @ts-ignore monkey patching non standard flag
-    transformer.handled = true;
-    const { kind, participantIdentity, trackId, codec } = transformer.options;
+
+    const { kind, participantIdentity, trackId, codec } =
+      transformer.options as ScriptTransformOptions;
     const cryptor = getTrackCryptor(participantIdentity, trackId);
     workerLogger.debug('transform', { codec });
-    cryptor.setupTransform(kind, transformer.readable, transformer.writable, trackId, codec);
+    cryptor.setupTransform(kind, transformer.readable, transformer.writable, trackId, false, codec);
   };
 }

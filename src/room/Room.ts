@@ -4,10 +4,8 @@ import {
   ConnectionQualityUpdate,
   type DataPacket,
   DataPacket_Kind,
-  DataStream_Chunk,
-  DataStream_Header,
-  DataStream_Trailer,
   DisconnectReason,
+  Encryption_Type,
   JoinResponse,
   LeaveRequest,
   LeaveRequest_Action,
@@ -48,12 +46,12 @@ import { getBrowser } from '../utils/browserParser';
 import DeviceManager from './DeviceManager';
 import RTCEngine from './RTCEngine';
 import { RegionUrlProvider } from './RegionUrlProvider';
+import IncomingDataStreamManager from './data-stream/incoming/IncomingDataStreamManager';
 import {
   type ByteStreamHandler,
-  ByteStreamReader,
   type TextStreamHandler,
-  TextStreamReader,
-} from './StreamReader';
+} from './data-stream/incoming/StreamReader';
+import OutgoingDataStreamManager from './data-stream/outgoing/OutgoingDataStreamManager';
 import {
   audioDefaults,
   publishDefaults,
@@ -81,17 +79,13 @@ import type { TrackProcessor } from './track/processor/types';
 import type { AdaptiveStreamSettings } from './track/types';
 import { getNewAudioContext, kindToSource, sourceToKind } from './track/utils';
 import {
-  type ByteStreamInfo,
   type ChatMessage,
   type SimulationOptions,
   type SimulationScenario,
-  type StreamController,
-  type TextStreamInfo,
   type TranscriptionSegment,
 } from './types';
 import {
   Future,
-  bigIntToNumber,
   createDummyVideoStreamTrack,
   extractChatMessage,
   extractTranscriptionSegments,
@@ -201,15 +195,15 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
    */
   private transcriptionReceivedTimes: Map<string, number>;
 
-  private byteStreamControllers = new Map<string, StreamController<DataStream_Chunk>>();
+  private incomingDataStreamManager: IncomingDataStreamManager;
 
-  private textStreamControllers = new Map<string, StreamController<DataStream_Chunk>>();
-
-  private byteStreamHandlers = new Map<string, ByteStreamHandler>();
-
-  private textStreamHandlers = new Map<string, TextStreamHandler>();
+  private outgoingDataStreamManager: OutgoingDataStreamManager;
 
   private rpcHandlers: Map<string, (data: RpcInvocationData) => Promise<string>> = new Map();
+
+  get hasE2EESetup(): boolean {
+    return this.e2eeManager !== undefined;
+  }
 
   /**
    * Creates a new Room, the primary construct for a LiveKit session.
@@ -240,6 +234,9 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
 
     this.maybeCreateEngine();
 
+    this.incomingDataStreamManager = new IncomingDataStreamManager();
+    this.outgoingDataStreamManager = new OutgoingDataStreamManager(this.engine, this.log);
+
     this.disconnectLock = new Mutex();
 
     this.localParticipant = new LocalParticipant(
@@ -248,7 +245,14 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       this.engine,
       this.options,
       this.rpcHandlers,
+      this.outgoingDataStreamManager,
     );
+
+    if (this.options.e2ee || this.options.encryption) {
+      this.setupE2EE();
+    }
+
+    this.engine.e2eeManager = this.e2eeManager;
 
     if (this.options.videoCaptureDefaults.deviceId) {
       this.localParticipant.activeDeviceMap.set(
@@ -269,10 +273,6 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       ).catch((e) => this.log.warn(`Could not set audio output: ${e.message}`, this.logContext));
     }
 
-    if (this.options.e2ee) {
-      this.setupE2EE();
-    }
-
     if (isWeb()) {
       const abortController = new AbortController();
 
@@ -290,25 +290,19 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
   }
 
   registerTextStreamHandler(topic: string, callback: TextStreamHandler) {
-    if (this.textStreamHandlers.has(topic)) {
-      throw new TypeError(`A text stream handler for topic "${topic}" has already been set.`);
-    }
-    this.textStreamHandlers.set(topic, callback);
+    return this.incomingDataStreamManager.registerTextStreamHandler(topic, callback);
   }
 
   unregisterTextStreamHandler(topic: string) {
-    this.textStreamHandlers.delete(topic);
+    return this.incomingDataStreamManager.unregisterTextStreamHandler(topic);
   }
 
   registerByteStreamHandler(topic: string, callback: ByteStreamHandler) {
-    if (this.byteStreamHandlers.has(topic)) {
-      throw new TypeError(`A byte stream handler for topic "${topic}" has already been set.`);
-    }
-    this.byteStreamHandlers.set(topic, callback);
+    return this.incomingDataStreamManager.registerByteStreamHandler(topic, callback);
   }
 
   unregisterByteStreamHandler(topic: string) {
-    this.byteStreamHandlers.delete(topic);
+    return this.incomingDataStreamManager.unregisterByteStreamHandler(topic);
   }
 
   /**
@@ -355,68 +349,6 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     this.rpcHandlers.delete(method);
   }
 
-  private async handleIncomingRpcRequest(
-    callerIdentity: string,
-    requestId: string,
-    method: string,
-    payload: string,
-    responseTimeout: number,
-    version: number,
-  ) {
-    await this.engine.publishRpcAck(callerIdentity, requestId);
-
-    if (version !== 1) {
-      await this.engine.publishRpcResponse(
-        callerIdentity,
-        requestId,
-        null,
-        RpcError.builtIn('UNSUPPORTED_VERSION'),
-      );
-      return;
-    }
-
-    const handler = this.rpcHandlers.get(method);
-
-    if (!handler) {
-      await this.engine.publishRpcResponse(
-        callerIdentity,
-        requestId,
-        null,
-        RpcError.builtIn('UNSUPPORTED_METHOD'),
-      );
-      return;
-    }
-
-    let responseError: RpcError | null = null;
-    let responsePayload: string | null = null;
-
-    try {
-      const response = await handler({
-        requestId,
-        callerIdentity,
-        payload,
-        responseTimeout,
-      });
-      if (byteLength(response) > MAX_PAYLOAD_BYTES) {
-        responseError = RpcError.builtIn('RESPONSE_PAYLOAD_TOO_LARGE');
-        console.warn(`RPC Response payload too large for ${method}`);
-      } else {
-        responsePayload = response;
-      }
-    } catch (error) {
-      if (error instanceof RpcError) {
-        responseError = error;
-      } else {
-        console.warn(
-          `Uncaught error returned by RPC handler for ${method}. Returning APPLICATION_ERROR instead.`,
-          error,
-        );
-        responseError = RpcError.builtIn('APPLICATION_ERROR');
-      }
-    }
-    await this.engine.publishRpcResponse(callerIdentity, requestId, responsePayload, responseError);
-  }
-
   /**
    * @experimental
    */
@@ -432,11 +364,17 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
   }
 
   private setupE2EE() {
-    if (this.options.e2ee) {
-      if ('e2eeManager' in this.options.e2ee) {
-        this.e2eeManager = this.options.e2ee.e2eeManager;
+    // when encryption is enabled via `options.encryption`, we enable data channel encryption
+
+    const dcEncryptionEnabled = !!this.options.encryption;
+    const e2eeOptions = this.options.encryption || this.options.e2ee;
+
+    if (e2eeOptions) {
+      if ('e2eeManager' in e2eeOptions) {
+        this.e2eeManager = e2eeOptions.e2eeManager;
+        this.e2eeManager.isDataChannelEncryptionEnabled = dcEncryptionEnabled;
       } else {
-        this.e2eeManager = new E2EEManager(this.options.e2ee);
+        this.e2eeManager = new E2EEManager(e2eeOptions, dcEncryptionEnabled);
       }
       this.e2eeManager.on(
         EncryptionEvent.ParticipantEncryptionStatusChanged,
@@ -520,6 +458,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     }
 
     this.engine = new RTCEngine(this.options);
+    this.engine.e2eeManager = this.e2eeManager;
 
     this.engine
       .on(EngineEvent.ParticipantUpdate, this.handleParticipantUpdates)
@@ -603,7 +542,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
           this.handleParticipantDisconnected(identity, participant);
         });
 
-        this.emit(RoomEvent.Moved, roomMoved.room!.name, roomMoved.token);
+        this.emit(RoomEvent.Moved, roomMoved.room!.name);
 
         if (roomMoved.participant) {
           this.handleParticipantUpdates([roomMoved.participant, ...roomMoved.otherParticipants]);
@@ -617,6 +556,9 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     }
     if (this.e2eeManager) {
       this.e2eeManager.setupEngine(this.engine);
+    }
+    if (this.outgoingDataStreamManager) {
+      this.outgoingDataStreamManager.setupEngine(this.engine);
     }
   }
 
@@ -822,6 +764,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         maxRetries: connectOptions.maxRetries,
         e2eeEnabled: !!this.e2eeManager,
         websocketTimeout: connectOptions.websocketTimeout,
+        singlePeerConnection: roomOptions.singlePeerConnection,
       },
       abortController.signal,
     );
@@ -863,7 +806,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     this.localParticipant.identity = pi.identity;
     this.localParticipant.setEnabledPublishCodecs(joinResponse.enabledPublishCodecs);
 
-    if (this.options.e2ee && this.e2eeManager) {
+    if (this.e2eeManager) {
       try {
         this.e2eeManager.setSifTrailer(joinResponse.sifTrailer);
       } catch (e: any) {
@@ -1000,8 +943,9 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         this.isResuming
       ) {
         // try aborting pending connection attempt
-        this.log.warn('abort connection attempt', this.logContext);
-        this.abortController?.abort();
+        const msg = 'Abort connection attempt due to user initiated disconnect';
+        this.log.warn(msg, this.logContext);
+        this.abortController?.abort(msg);
         // in case the abort controller didn't manage to cancel the connection attempt, reject the connect promise explicitly
         this.connectFuture?.reject?.(
           new ConnectionError('Client initiated disconnect', ConnectionErrorReason.Cancelled),
@@ -1044,7 +988,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
    * @internal for testing
    */
   async simulateScenario(scenario: SimulationScenario, arg?: any) {
-    let postAction = () => {};
+    let postAction = async () => {};
     let req: SimulateScenario | undefined;
     switch (scenario) {
       case 'signal-reconnect':
@@ -1303,10 +1247,10 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
    */
   async switchActiveDevice(kind: MediaDeviceKind, deviceId: string, exact: boolean = true) {
     let success = true;
-    let needsUpdateWithoutTracks = false;
+    let shouldTriggerImmediateDeviceChange = false;
     const deviceConstraint = exact ? { exact: deviceId } : deviceId;
     if (kind === 'audioinput') {
-      needsUpdateWithoutTracks = this.localParticipant.audioTrackPublications.size === 0;
+      shouldTriggerImmediateDeviceChange = this.localParticipant.audioTrackPublications.size === 0;
       const prevDeviceId =
         this.getActiveDevice(kind) ?? this.options.audioCaptureDefaults!.deviceId;
       this.options.audioCaptureDefaults!.deviceId = deviceConstraint;
@@ -1321,8 +1265,10 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         this.options.audioCaptureDefaults!.deviceId = prevDeviceId;
         throw e;
       }
+      const isMuted = tracks.some((t) => t.track?.isMuted ?? false);
+      if (success && isMuted) shouldTriggerImmediateDeviceChange = true;
     } else if (kind === 'videoinput') {
-      needsUpdateWithoutTracks = this.localParticipant.videoTrackPublications.size === 0;
+      shouldTriggerImmediateDeviceChange = this.localParticipant.videoTrackPublications.size === 0;
       const prevDeviceId =
         this.getActiveDevice(kind) ?? this.options.videoCaptureDefaults!.deviceId;
       this.options.videoCaptureDefaults!.deviceId = deviceConstraint;
@@ -1337,12 +1283,15 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         this.options.videoCaptureDefaults!.deviceId = prevDeviceId;
         throw e;
       }
+      const isMuted = tracks.some((t) => t.track?.isMuted ?? false);
+      if (success && isMuted) shouldTriggerImmediateDeviceChange = true;
     } else if (kind === 'audiooutput') {
+      shouldTriggerImmediateDeviceChange = true;
       if (
         (!supportsSetSinkId() && !this.options.webAudioMix) ||
         (this.options.webAudioMix && this.audioContext && !('setSinkId' in this.audioContext))
       ) {
-        throw new Error('cannot switch audio output, setSinkId not supported');
+        throw new Error('cannot switch audio output, the current browser does not support it');
       }
       if (this.options.webAudioMix) {
         // setting `default` for web audio output doesn't work, so we need to normalize the id before
@@ -1369,12 +1318,9 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         throw e;
       }
     }
-    if (needsUpdateWithoutTracks || kind === 'audiooutput') {
-      // if there are not active tracks yet or we're switching audiooutput, we need to manually update the active device map here as changing audio output won't result in a track restart
-      this.localParticipant.activeDeviceMap.set(
-        kind,
-        (kind === 'audiooutput' && this.options.audioOutput?.deviceId) || deviceId,
-      );
+
+    if (shouldTriggerImmediateDeviceChange) {
+      this.localParticipant.activeDeviceMap.set(kind, deviceId);
       this.emit(RoomEvent.ActiveDeviceChanged, kind, deviceId);
     }
 
@@ -1426,6 +1372,11 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     // We'll defer these events until when the room is connected or eventually disconnected.
     if (this.state === ConnectionState.Connecting || this.state === ConnectionState.Reconnecting) {
       const reconnectedHandler = () => {
+        this.log.debug('deferring on track for later', {
+          mediaTrackId: mediaTrack.id,
+          mediaStreamId: stream.id,
+          tracksInStream: stream.getTracks().map((track) => track.id),
+        });
         this.onTrackAdded(mediaTrack, stream, receiver);
         cleanup();
       };
@@ -1472,6 +1423,28 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       return;
     }
 
+    // in single peer connection case, the trackID is locally generated,
+    // not the TR_ prefixed one generated by the server,
+    // use `mid` to find the appropriate track.
+    if (!trackId.startsWith('TR')) {
+      const id = this.engine.getTrackIdForReceiver(receiver);
+      if (!id) {
+        this.log.error(
+          `Tried to add a track whose 'sid' could not be found for a participant, that's not present. Sid: ${participantSid}`,
+          this.logContext,
+        );
+        return;
+      }
+
+      trackId = id;
+    }
+    if (!trackId.startsWith('TR')) {
+      this.log.warn(
+        `Tried to add a track whose 'sid' could not be determined for a participant, that's not present. Sid: ${participantSid}, streamId: ${streamId}, trackId: ${trackId}`,
+        { ...this.logContext, rpID: participantSid, streamId, trackId },
+      );
+    }
+
     let adaptiveStreamSettings: AdaptiveStreamSettings | undefined;
     if (this.options.adaptiveStream) {
       if (typeof this.options.adaptiveStream === 'object') {
@@ -1481,13 +1454,22 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       }
     }
 
-    participant.addSubscribedMediaTrack(
+    const publication = participant.addSubscribedMediaTrack(
       mediaTrack,
       trackId,
       stream,
       receiver,
       adaptiveStreamSettings,
     );
+
+    if (publication?.isEncrypted && !this.e2eeManager) {
+      this.emit(
+        RoomEvent.EncryptionError,
+        new Error(
+          `Encrypted ${publication.source} track received from participant ${participant.sid}, but room does not have encryption enabled!`,
+        ),
+      );
+    }
   }
 
   private handleRestarting = () => {
@@ -1545,6 +1527,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     this.isResuming = false;
     this.bufferedEvents = [];
     this.transcriptionReceivedTimes.clear();
+    this.incomingDataStreamManager.clearHandlersAndControllers();
     if (this.state === ConnectionState.Disconnected) {
       return;
     }
@@ -1643,6 +1626,8 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       return;
     }
 
+    this.incomingDataStreamManager.validateParticipantHasNoActiveDataStreams(identity);
+
     participant.trackPublications.forEach((publication) => {
       participant.unpublishTrack(publication.trackSid, true);
     });
@@ -1730,8 +1715,8 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         return;
       }
       const newStreamState = Track.streamStateFromProto(streamState.state);
+      pub.track.setStreamState(newStreamState);
       if (newStreamState !== pub.track.streamState) {
-        pub.track.streamState = newStreamState;
         participant.emit(ParticipantEvent.TrackStreamStateChanged, pub, pub.track.streamState);
         this.emitWhenConnected(
           RoomEvent.TrackStreamStateChanged,
@@ -1771,11 +1756,11 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     pub.setSubscriptionError(update.err);
   };
 
-  private handleDataPacket = (packet: DataPacket) => {
+  private handleDataPacket = (packet: DataPacket, encryptionType: Encryption_Type) => {
     // find the participant
     const participant = this.remoteParticipants.get(packet.participantIdentity);
     if (packet.value.case === 'user') {
-      this.handleUserPacket(participant, packet.value.value, packet.kind);
+      this.handleUserPacket(participant, packet.value.value, packet.kind, encryptionType);
     } else if (packet.value.case === 'transcription') {
       this.handleTranscription(participant, packet.value.value);
     } else if (packet.value.case === 'sipDtmf') {
@@ -1784,12 +1769,12 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
       this.handleChatMessage(participant, packet.value.value);
     } else if (packet.value.case === 'metrics') {
       this.handleMetrics(packet.value.value, participant);
-    } else if (packet.value.case === 'streamHeader') {
-      this.handleStreamHeader(packet.value.value, packet.participantIdentity);
-    } else if (packet.value.case === 'streamChunk') {
-      this.handleStreamChunk(packet.value.value);
-    } else if (packet.value.case === 'streamTrailer') {
-      this.handleStreamTrailer(packet.value.value);
+    } else if (
+      packet.value.case === 'streamHeader' ||
+      packet.value.case === 'streamChunk' ||
+      packet.value.case === 'streamTrailer'
+    ) {
+      this.handleDataStream(packet, encryptionType);
     } else if (packet.value.case === 'rpcRequest') {
       const rpc = packet.value.value;
       this.handleIncomingRpcRequest(
@@ -1803,125 +1788,23 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     }
   };
 
-  private async handleStreamHeader(streamHeader: DataStream_Header, participantIdentity: string) {
-    if (streamHeader.contentHeader.case === 'byteHeader') {
-      const streamHandlerCallback = this.byteStreamHandlers.get(streamHeader.topic);
-
-      if (!streamHandlerCallback) {
-        this.log.debug(
-          'ignoring incoming byte stream due to no handler for topic',
-          streamHeader.topic,
-        );
-        return;
-      }
-      let streamController: ReadableStreamDefaultController<DataStream_Chunk>;
-      const info: ByteStreamInfo = {
-        id: streamHeader.streamId,
-        name: streamHeader.contentHeader.value.name ?? 'unknown',
-        mimeType: streamHeader.mimeType,
-        size: streamHeader.totalLength ? Number(streamHeader.totalLength) : undefined,
-        topic: streamHeader.topic,
-        timestamp: bigIntToNumber(streamHeader.timestamp),
-        attributes: streamHeader.attributes,
-      };
-      const stream = new ReadableStream({
-        start: (controller) => {
-          streamController = controller;
-          this.byteStreamControllers.set(streamHeader.streamId, {
-            info,
-            controller: streamController,
-            startTime: Date.now(),
-          });
-        },
-      });
-      streamHandlerCallback(
-        new ByteStreamReader(info, stream, bigIntToNumber(streamHeader.totalLength)),
-        {
-          identity: participantIdentity,
-        },
-      );
-    } else if (streamHeader.contentHeader.case === 'textHeader') {
-      const streamHandlerCallback = this.textStreamHandlers.get(streamHeader.topic);
-
-      if (!streamHandlerCallback) {
-        this.log.debug(
-          'ignoring incoming text stream due to no handler for topic',
-          streamHeader.topic,
-        );
-        return;
-      }
-      let streamController: ReadableStreamDefaultController<DataStream_Chunk>;
-      const info: TextStreamInfo = {
-        id: streamHeader.streamId,
-        mimeType: streamHeader.mimeType,
-        size: streamHeader.totalLength ? Number(streamHeader.totalLength) : undefined,
-        topic: streamHeader.topic,
-        timestamp: Number(streamHeader.timestamp),
-        attributes: streamHeader.attributes,
-      };
-
-      const stream = new ReadableStream<DataStream_Chunk>({
-        start: (controller) => {
-          streamController = controller;
-          this.textStreamControllers.set(streamHeader.streamId, {
-            info,
-            controller: streamController,
-            startTime: Date.now(),
-          });
-        },
-      });
-      streamHandlerCallback(
-        new TextStreamReader(info, stream, bigIntToNumber(streamHeader.totalLength)),
-        { identity: participantIdentity },
-      );
-    }
-  }
-
-  private handleStreamChunk(chunk: DataStream_Chunk) {
-    const fileBuffer = this.byteStreamControllers.get(chunk.streamId);
-    if (fileBuffer) {
-      if (chunk.content.length > 0) {
-        fileBuffer.controller.enqueue(chunk);
-      }
-    }
-    const textBuffer = this.textStreamControllers.get(chunk.streamId);
-    if (textBuffer) {
-      if (chunk.content.length > 0) {
-        textBuffer.controller.enqueue(chunk);
-      }
-    }
-  }
-
-  private handleStreamTrailer(trailer: DataStream_Trailer) {
-    const textBuffer = this.textStreamControllers.get(trailer.streamId);
-    if (textBuffer) {
-      textBuffer.info.attributes = {
-        ...textBuffer.info.attributes,
-        ...trailer.attributes,
-      };
-      textBuffer.controller.close();
-      this.textStreamControllers.delete(trailer.streamId);
-    }
-
-    const fileBuffer = this.byteStreamControllers.get(trailer.streamId);
-    if (fileBuffer) {
-      {
-        fileBuffer.info.attributes = { ...fileBuffer.info.attributes, ...trailer.attributes };
-        fileBuffer.controller.close();
-        this.byteStreamControllers.delete(trailer.streamId);
-      }
-    }
-  }
-
   private handleUserPacket = (
     participant: RemoteParticipant | undefined,
     userPacket: UserPacket,
     kind: DataPacket_Kind,
+    encryptionType: Encryption_Type,
   ) => {
-    this.emit(RoomEvent.DataReceived, userPacket.payload, participant, kind, userPacket.topic);
+    this.emit(
+      RoomEvent.DataReceived,
+      userPacket.payload,
+      participant,
+      kind,
+      userPacket.topic,
+      encryptionType,
+    );
 
     // also emit on the participant
-    participant?.emit(ParticipantEvent.DataReceived, userPacket.payload, kind);
+    participant?.emit(ParticipantEvent.DataReceived, userPacket.payload, kind, encryptionType);
   };
 
   private handleSipDtmf = (participant: RemoteParticipant | undefined, dtmf: SipDTMF) => {
@@ -1930,8 +1813,6 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     // also emit on the participant
     participant?.emit(ParticipantEvent.SipDTMFReceived, dtmf);
   };
-
-  bufferedSegments: Map<string, TranscriptionSegmentModel> = new Map();
 
   private handleTranscription = (
     _remoteParticipant: RemoteParticipant | undefined,
@@ -1962,6 +1843,74 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
   private handleMetrics = (metrics: MetricsBatch, participant?: Participant) => {
     this.emit(RoomEvent.MetricsReceived, metrics, participant);
   };
+
+  private handleDataStream = (packet: DataPacket, encryptionType: Encryption_Type) => {
+    this.incomingDataStreamManager.handleDataStreamPacket(packet, encryptionType);
+  };
+
+  private async handleIncomingRpcRequest(
+    callerIdentity: string,
+    requestId: string,
+    method: string,
+    payload: string,
+    responseTimeout: number,
+    version: number,
+  ) {
+    await this.engine.publishRpcAck(callerIdentity, requestId);
+
+    if (version !== 1) {
+      await this.engine.publishRpcResponse(
+        callerIdentity,
+        requestId,
+        null,
+        RpcError.builtIn('UNSUPPORTED_VERSION'),
+      );
+      return;
+    }
+
+    const handler = this.rpcHandlers.get(method);
+
+    if (!handler) {
+      await this.engine.publishRpcResponse(
+        callerIdentity,
+        requestId,
+        null,
+        RpcError.builtIn('UNSUPPORTED_METHOD'),
+      );
+      return;
+    }
+
+    let responseError: RpcError | null = null;
+    let responsePayload: string | null = null;
+
+    try {
+      const response = await handler({
+        requestId,
+        callerIdentity,
+        payload,
+        responseTimeout,
+      });
+      if (byteLength(response) > MAX_PAYLOAD_BYTES) {
+        responseError = RpcError.builtIn('RESPONSE_PAYLOAD_TOO_LARGE');
+        console.warn(`RPC Response payload too large for ${method}`);
+      } else {
+        responsePayload = response;
+      }
+    } catch (error) {
+      if (error instanceof RpcError) {
+        responseError = error;
+      } else {
+        console.warn(
+          `Uncaught error returned by RPC handler for ${method}. Returning APPLICATION_ERROR instead.`,
+          error,
+        );
+        responseError = RpcError.builtIn('APPLICATION_ERROR');
+      }
+    }
+    await this.engine.publishRpcResponse(callerIdentity, requestId, responsePayload, responseError);
+  }
+
+  bufferedSegments: Map<string, TranscriptionSegmentModel> = new Map();
 
   private handleAudioPlaybackStarted = () => {
     if (this.canPlaybackAudio) {
@@ -2649,6 +2598,13 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     if (event !== RoomEvent.ActiveSpeakersChanged && event !== RoomEvent.TranscriptionReceived) {
       // only extract logContext from arguments in order to avoid logging the whole object tree
       const minimizedArgs = mapArgs(args).filter((arg: unknown) => arg !== undefined);
+      if (event === RoomEvent.TrackSubscribed || event === RoomEvent.TrackUnsubscribed) {
+        this.log.trace(`subscribe trace: ${event}`, {
+          ...this.logContext,
+          event,
+          args: minimizedArgs,
+        });
+      }
       this.log.debug(`room event ${event}`, { ...this.logContext, event, args: minimizedArgs });
     }
     return super.emit(event, ...args);
@@ -2679,7 +2635,7 @@ export type RoomEventCallbacks = {
   reconnected: () => void;
   disconnected: (reason?: DisconnectReason) => void;
   connectionStateChanged: (state: ConnectionState) => void;
-  moved: (name: string, token: string) => void;
+  moved: (name: string) => void;
   mediaDevicesChanged: () => void;
   participantConnected: (participant: RemoteParticipant) => void;
   participantDisconnected: (participant: RemoteParticipant) => void;
@@ -2728,6 +2684,7 @@ export type RoomEventCallbacks = {
     participant?: RemoteParticipant,
     kind?: DataPacket_Kind,
     topic?: string,
+    encryptionType?: Encryption_Type,
   ) => void;
   sipDTMFReceived: (dtmf: SipDTMF, participant?: RemoteParticipant) => void;
   transcriptionReceived: (

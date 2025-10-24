@@ -22,7 +22,7 @@ import type RemoteTrackPublication from './track/RemoteTrackPublication';
 import type RemoteVideoTrack from './track/RemoteVideoTrack';
 import { Track } from './track/Track';
 import type { TrackPublication } from './track/TrackPublication';
-import { type VideoCodec, videoCodecs } from './track/options';
+import { type AudioCodec, type VideoCodec, audioCodecs, videoCodecs } from './track/options';
 import { getNewAudioContext } from './track/utils';
 import type { ChatMessage, LiveKitReactNativeInfo, TranscriptionSegment } from './types';
 
@@ -64,15 +64,16 @@ export function supportsAV1(): boolean {
   if (!('getCapabilities' in RTCRtpSender)) {
     return false;
   }
-  if (isSafari()) {
+  if (isSafari() || isFireFox()) {
     // Safari 17 on iPhone14 reports AV1 capability, but does not actually support it
+    // Firefox does support AV1, but SVC publishing is not supported
     return false;
   }
   const capabilities = RTCRtpSender.getCapabilities('video');
   let hasAV1 = false;
   if (capabilities) {
     for (const codec of capabilities.codecs) {
-      if (codec.mimeType === 'video/AV1') {
+      if (codec.mimeType.toLowerCase() === 'video/av1') {
         hasAV1 = true;
         break;
       }
@@ -96,12 +97,20 @@ export function supportsVP9(): boolean {
       // Safari 16 and below does not support VP9
       return false;
     }
+    if (
+      browser?.os === 'iOS' &&
+      browser?.osVersion &&
+      compareVersions(browser.osVersion, '16') < 0
+    ) {
+      // Safari 16 and below on iOS does not support VP9 we need the iOS check to account for other browsers running webkit under the hood
+      return false;
+    }
   }
   const capabilities = RTCRtpSender.getCapabilities('video');
   let hasVP9 = false;
   if (capabilities) {
     for (const codec of capabilities.codecs) {
-      if (codec.mimeType === 'video/VP9') {
+      if (codec.mimeType.toLowerCase() === 'video/vp9') {
         hasVP9 = true;
         break;
       }
@@ -110,18 +119,45 @@ export function supportsVP9(): boolean {
   return hasVP9;
 }
 
+export function supportsH265(): boolean {
+  if (!('getCapabilities' in RTCRtpSender)) {
+    return false;
+  }
+
+  const capabilities = RTCRtpSender.getCapabilities('video');
+  let hasH265 = false;
+  if (capabilities) {
+    for (const codec of capabilities.codecs) {
+      if (codec.mimeType.toLowerCase() === 'video/h265') {
+        hasH265 = true;
+        break;
+      }
+    }
+  }
+  return hasH265;
+}
+
 export function isSVCCodec(codec?: string): boolean {
   return codec === 'av1' || codec === 'vp9';
 }
 
 export function supportsSetSinkId(elm?: HTMLMediaElement): boolean {
-  if (!document) {
+  if (!document || isSafariBased()) {
     return false;
   }
   if (!elm) {
     elm = document.createElement('audio');
   }
   return 'setSinkId' in elm;
+}
+
+/**
+ * Checks whether or not setting an audio output via {@link Room#setActiveDevice}
+ * is supported for the current browser.
+ */
+export function supportsAudioOutputSelection(): boolean {
+  // Note: this is method publicly exported under a user friendly name and currently only proxying `supportsSetSinkId`
+  return supportsSetSinkId();
 }
 
 export function isBrowserSupported() {
@@ -136,7 +172,8 @@ export function isFireFox(): boolean {
 }
 
 export function isChromiumBased(): boolean {
-  return getBrowser()?.name === 'Chrome';
+  const browser = getBrowser();
+  return !!browser && browser.name === 'Chrome' && browser.os !== 'iOS';
 }
 
 export function isSafari(): boolean {
@@ -148,9 +185,12 @@ export function isSafariBased(): boolean {
   return b?.name === 'Safari' || b?.os === 'iOS';
 }
 
-export function isSafari17(): boolean {
+export function isSafari17Based(): boolean {
   const b = getBrowser();
-  return b?.name === 'Safari' && b.version.startsWith('17.');
+  return (
+    (b?.name === 'Safari' && b.version.startsWith('17.')) ||
+    (b?.os === 'iOS' && !!b?.osVersion && compareVersions(b.osVersion, '17') >= 0)
+  );
 }
 
 export function isSafariSvcApi(browser?: BrowserDetails): boolean {
@@ -158,7 +198,12 @@ export function isSafariSvcApi(browser?: BrowserDetails): boolean {
     browser = getBrowser();
   }
   // Safari 18.4 requires legacy svc api and scaleResolutionDown to be set
-  return browser?.name === 'Safari' && compareVersions(browser.version, '18.3') > 0;
+  return (
+    (browser?.name === 'Safari' && compareVersions(browser.version, '18.3') > 0) ||
+    (browser?.os === 'iOS' &&
+      !!browser?.osVersion &&
+      compareVersions(browser.osVersion, '18.3') > 0)
+  );
 }
 
 export function isMobile(): boolean {
@@ -180,12 +225,12 @@ export function isE2EESimulcastSupported() {
     } else if (
       browser.os === 'iOS' &&
       browser.osVersion &&
-      compareVersions(supportedSafariVersion, browser.osVersion) >= 0
+      compareVersions(browser.osVersion, supportedSafariVersion) >= 0
     ) {
       return true;
     } else if (
       browser.name === 'Safari' &&
-      compareVersions(supportedSafariVersion, browser.version) >= 0
+      compareVersions(browser.version, supportedSafariVersion) >= 0
     ) {
       return true;
     } else {
@@ -248,6 +293,14 @@ export function getDevicePixelRatio(): number {
   return 1;
 }
 
+/**
+ * @param v1 - The first version string to compare.
+ * @param v2 - The second version string to compare.
+ * @returns A number indicating the order of the versions:
+ *   - 1 if v1 is greater than v2
+ *   - -1 if v1 is less than v2
+ *   - 0 if v1 and v2 are equal
+ */
 export function compareVersions(v1: string, v2: string): number {
   const parts1 = v1.split('.');
   const parts2 = v2.split('.');
@@ -375,6 +428,26 @@ export function getEmptyAudioStreamTrack() {
   return emptyAudioStreamTrack.clone();
 }
 
+export function getStereoAudioStreamTrack() {
+  const ctx = new AudioContext();
+  const oscLeft = ctx.createOscillator();
+  const oscRight = ctx.createOscillator();
+  oscLeft.frequency.value = 440;
+  oscRight.frequency.value = 220;
+  const merger = ctx.createChannelMerger(2);
+  oscLeft.connect(merger, 0, 0); // left channel
+  oscRight.connect(merger, 0, 1); // right channel
+  const dst = ctx.createMediaStreamDestination();
+  merger.connect(dst);
+  oscLeft.start();
+  oscRight.start();
+  const [stereoTrack] = dst.stream.getAudioTracks();
+  if (!stereoTrack) {
+    throw Error('Could not get stereo media stream audio track');
+  }
+  return stereoTrack;
+}
+
 export class Future<T> {
   promise: Promise<T>;
 
@@ -383,6 +456,12 @@ export class Future<T> {
   reject?: (e: any) => void;
 
   onFinally?: () => void;
+
+  get isResolved(): boolean {
+    return this._isResolved;
+  }
+
+  private _isResolved: boolean = false;
 
   constructor(
     futureBase?: (resolve: (arg: T) => void, reject: (e: any) => void) => void,
@@ -395,7 +474,10 @@ export class Future<T> {
       if (futureBase) {
         await futureBase(resolve, reject);
       }
-    }).finally(() => this.onFinally?.());
+    }).finally(() => {
+      this._isResolved = true;
+      this.onFinally?.();
+    });
   }
 }
 
@@ -481,6 +563,10 @@ export function createAudioAnalyser(
   return { calculateVolume, analyser, cleanup };
 }
 
+export function isAudioCodec(maybeCodec: string): maybeCodec is AudioCodec {
+  return audioCodecs.includes(maybeCodec as AudioCodec);
+}
+
 export function isVideoCodec(maybeCodec: string): maybeCodec is VideoCodec {
   return videoCodecs.includes(maybeCodec as VideoCodec);
 }
@@ -495,13 +581,13 @@ export function unwrapConstraint(constraint: ConstrainDOMString | ConstrainULong
   if (Array.isArray(constraint)) {
     return constraint[0];
   }
-  if (constraint.exact) {
+  if (constraint.exact !== undefined) {
     if (Array.isArray(constraint.exact)) {
       return constraint.exact[0];
     }
     return constraint.exact;
   }
-  if (constraint.ideal) {
+  if (constraint.ideal !== undefined) {
     if (Array.isArray(constraint.ideal)) {
       return constraint.ideal[0];
     }
@@ -663,4 +749,15 @@ export function splitUtf8(s: string, n: number): Uint8Array[] {
     result.push(encoded);
   }
   return result;
+}
+
+export function extractMaxAgeFromRequestHeaders(headers: Headers): number | undefined {
+  const cacheControl = headers.get('Cache-Control');
+  if (cacheControl) {
+    const maxAge = cacheControl.match(/(?:^|[,\s])max-age=(\d+)/)?.[1];
+    if (maxAge) {
+      return parseInt(maxAge, 10);
+    }
+  }
+  return undefined;
 }

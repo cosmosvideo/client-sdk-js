@@ -46,6 +46,11 @@ export class PublishVideoCheck extends Checker {
     const video = document.createElement('video');
     video.srcObject = stream;
     video.muted = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    // For iOS Safari
+    video.setAttribute('playsinline', 'true');
+    document.body.appendChild(video);
 
     await new Promise<void>((resolve) => {
       video.onplay = () => {
@@ -83,6 +88,7 @@ export class PublishVideoCheck extends Checker {
       video.play();
     });
 
+    stream.getTracks().forEach((t) => t.stop());
     video.remove();
   }
 }

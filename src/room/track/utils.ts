@@ -1,4 +1,4 @@
-import { TrackPublishedResponse, TrackSource } from '@livekit/protocol';
+import { TrackInfo, TrackPublishedResponse, TrackSource, VideoQuality } from '@livekit/protocol';
 import type { AudioProcessorOptions, TrackProcessor, VideoProcessorOptions } from '../..';
 import { cloneDeep } from '../../utils/cloneDeep';
 import { isSafari, sleep } from '../utils';
@@ -147,10 +147,18 @@ export function getNewAudioContext(): AudioContext | void {
           }
         } catch (e) {
           console.warn('Error trying to auto-resume audio context', e);
+        } finally {
+          window.document.body?.removeEventListener('click', handleResume);
         }
-
-        window.document.body?.removeEventListener('click', handleResume);
       };
+
+      // https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/statechange_event
+      audioContext.addEventListener('statechange', () => {
+        if (audioContext.state === 'closed') {
+          window.document.body?.removeEventListener('click', handleResume);
+        }
+      });
+
       window.document.body.addEventListener('click', handleResume);
     }
     return audioContext;
@@ -328,4 +336,15 @@ export function getTrackSourceFromProto(source: TrackSource): Track.Source {
     default:
       return Track.Source.Unknown;
   }
+}
+
+export function areDimensionsSmaller(a: Track.Dimensions, b: Track.Dimensions): boolean {
+  return a.width * a.height < b.width * b.height;
+}
+
+export function layerDimensionsFor(
+  trackInfo: TrackInfo,
+  quality: VideoQuality,
+): Track.Dimensions | undefined {
+  return trackInfo.layers?.find((l) => l.quality === quality);
 }
