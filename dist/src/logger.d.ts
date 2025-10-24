@@ -10,6 +10,7 @@ export declare enum LogLevel {
 export declare enum LoggerNames {
     Default = "livekit",
     Room = "livekit-room",
+    TokenSource = "livekit-token-source",
     Participant = "livekit-participant",
     Track = "livekit-track",
     Publication = "livekit-track-publication",

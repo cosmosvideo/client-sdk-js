@@ -14,9 +14,10 @@ export declare class ParticipantKeyHandler extends ParticipantKeyHandler_base {
     private currentKeyIndex;
     private cryptoKeyRing;
     private decryptionFailureCounts;
-    private keyProviderOptions;
     private ratchetPromiseMap;
-    private participantIdentity;
+    readonly participantIdentity: string;
+    /** @internal */
+    readonly keyProviderOptions: KeyProviderOptions;
     /**
      * true if the current key has not been marked as invalid
      */

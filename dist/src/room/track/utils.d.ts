@@ -1,4 +1,4 @@
-import { TrackPublishedResponse, TrackSource } from '@livekit/protocol';
+import { TrackInfo, TrackPublishedResponse, TrackSource, VideoQuality } from '@livekit/protocol';
 import type { AudioProcessorOptions, TrackProcessor, VideoProcessorOptions } from '../..';
 import { Track } from './Track';
 import type { TrackPublication } from './TrackPublication';
@@ -42,4 +42,6 @@ export declare function extractProcessorsFromOptions(options: CreateLocalTracksO
     };
 };
 export declare function getTrackSourceFromProto(source: TrackSource): Track.Source;
+export declare function areDimensionsSmaller(a: Track.Dimensions, b: Track.Dimensions): boolean;
+export declare function layerDimensionsFor(trackInfo: TrackInfo, quality: VideoQuality): Track.Dimensions | undefined;
 //# sourceMappingURL=utils.d.ts.map

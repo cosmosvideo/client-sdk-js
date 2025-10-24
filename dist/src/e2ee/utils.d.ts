@@ -1,3 +1,4 @@
+import { type DataPacket, EncryptedPacketPayload } from '@livekit/protocol';
 export declare function isE2EESupported(): boolean;
 export declare function isScriptTransformSupported(): boolean;
 export declare function isInsertableStreamSupported(): boolean;
@@ -24,4 +25,5 @@ export declare function ratchet(material: CryptoKey, salt: string): Promise<Arra
 export declare function needsRbspUnescaping(frameData: Uint8Array): boolean;
 export declare function parseRbsp(stream: Uint8Array): Uint8Array;
 export declare function writeRbsp(data_in: Uint8Array): Uint8Array;
+export declare function asEncryptablePacket(packet: DataPacket): EncryptedPacketPayload | undefined;
 //# sourceMappingURL=utils.d.ts.map

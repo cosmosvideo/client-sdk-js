@@ -1,6 +1,7 @@
-import { AddTrackRequest, AudioTrackFeature, ConnectionQualityUpdate, JoinResponse, LeaveRequest, ParticipantInfo, ReconnectReason, ReconnectResponse, RequestResponse, Room, RoomMovedResponse, SessionDescription, SignalRequest, SignalTarget, SimulateScenario, SpeakerInfo, StreamStateUpdate, SubscribedQualityUpdate, SubscriptionPermissionUpdate, SubscriptionResponse, SyncState, TrackPermission, TrackPublishedResponse, TrackUnpublishedResponse, UpdateSubscription, UpdateTrackSettings, VideoLayer } from '@livekit/protocol';
+import { AddTrackRequest, AudioTrackFeature, ConnectionQualityUpdate, JoinResponse, LeaveRequest, MediaSectionsRequirement, ParticipantInfo, ReconnectReason, ReconnectResponse, RequestResponse, Room, RoomMovedResponse, SessionDescription, SignalRequest, SignalResponse, SignalTarget, SimulateScenario, SpeakerInfo, StreamStateUpdate, SubscribedQualityUpdate, SubscriptionPermissionUpdate, SubscriptionResponse, SyncState, TrackPermission, TrackPublishedResponse, TrackUnpublishedResponse, UpdateSubscription, UpdateTrackSettings, VideoLayer } from '@livekit/protocol';
 import type { LoggerOptions } from '../room/types';
 import { AsyncQueue } from '../utils/AsyncQueue';
+import { WebSocketStream } from './WebSocketStream';
 interface ConnectOpts extends SignalOptions {
     /** internal */
     reconnect?: boolean;
@@ -15,6 +16,7 @@ export interface SignalOptions {
     maxRetries: number;
     e2eeEnabled: boolean;
     websocketTimeout: number;
+    singlePeerConnection: boolean;
 }
 type SignalMessage = SignalRequest['message'];
 export declare enum SignalConnectionState {
@@ -34,8 +36,12 @@ export declare class SignalClient {
     /** simulate signaling latency by delaying messages */
     signalLatency?: number;
     onClose?: (reason: string) => void;
-    onAnswer?: (sd: RTCSessionDescriptionInit) => void;
-    onOffer?: (sd: RTCSessionDescriptionInit) => void;
+    onAnswer?: (sd: RTCSessionDescriptionInit, offerId: number, midToTrackId: {
+        [key: string]: string;
+    }) => void;
+    onOffer?: (sd: RTCSessionDescriptionInit, offerId: number, midToTrackId: {
+        [key: string]: string;
+    }) => void;
     onTrickle?: (sd: RTCIceCandidateInit, target: SignalTarget) => void;
     onParticipantUpdate?: (updates: ParticipantInfo[]) => void;
     onLocalTrackPublished?: (res: TrackPublishedResponse) => void;
@@ -54,8 +60,9 @@ export declare class SignalClient {
     onRequestResponse?: (response: RequestResponse) => void;
     onLocalTrackSubscribed?: (trackSid: string) => void;
     onRoomMoved?: (res: RoomMovedResponse) => void;
+    onMediaSectionsRequirement?: (requirement: MediaSectionsRequirement) => void;
     connectOptions?: ConnectOpts;
-    ws?: WebSocket;
+    ws?: WebSocketStream;
     get currentState(): SignalConnectionState;
     get isDisconnected(): boolean;
     private get isEstablishingConnection();
@@ -71,16 +78,18 @@ export declare class SignalClient {
     private log;
     private loggerContextCb?;
     private _requestId;
+    private streamWriter;
     constructor(useJSON?: boolean, loggerOptions?: LoggerOptions);
     private get logContext();
     join(url: string, token: string, opts: SignalOptions, abortSignal?: AbortSignal): Promise<JoinResponse>;
     reconnect(url: string, token: string, sid?: string, reason?: ReconnectReason): Promise<ReconnectResponse | undefined>;
     private connect;
+    startReadingLoop(signalReader: ReadableStreamDefaultReader<string | ArrayBuffer>, firstMessage?: SignalResponse): Promise<void>;
     /** @internal */
     resetCallbacks: () => void;
-    close(updateState?: boolean): Promise<void>;
-    sendOffer(offer: RTCSessionDescriptionInit): void;
-    sendAnswer(answer: RTCSessionDescriptionInit): Promise<void>;
+    close(updateState?: boolean, reason?: string): Promise<void>;
+    sendOffer(offer: RTCSessionDescriptionInit, offerId: number): void;
+    sendAnswer(answer: RTCSessionDescriptionInit, offerId: number): Promise<void>;
     sendIceCandidate(candidate: RTCIceCandidateInit, target: SignalTarget): Promise<void>;
     sendMuteTrack(trackSid: string, muted: boolean): Promise<void>;
     sendAddTrack(req: AddTrackRequest): Promise<void>;
@@ -110,7 +119,31 @@ export declare class SignalClient {
     private clearPingTimeout;
     private startPingInterval;
     private clearPingInterval;
+    /**
+     * Handles the successful connection to the signal server
+     * @param connection The WebSocket connection
+     * @param timeoutHandle The timeout handle to clear
+     * @param firstMessage Optional first message to process
+     * @internal
+     */
+    private handleSignalConnected;
+    /**
+     * Validates the first message received from the signal server
+     * @param firstSignalResponse The first signal response received
+     * @param isReconnect Whether this is a reconnection attempt
+     * @returns Validation result with response or error
+     * @internal
+     */
+    private validateFirstMessage;
+    /**
+     * Handles WebSocket connection errors by validating with the server
+     * @param reason The error that occurred
+     * @param validateUrl The URL to validate the connection with
+     * @returns A ConnectionError with appropriate reason and status
+     * @internal
+     */
+    private handleConnectionError;
 }
-export declare function toProtoSessionDescription(rsd: RTCSessionDescription | RTCSessionDescriptionInit): SessionDescription;
+export declare function toProtoSessionDescription(rsd: RTCSessionDescription | RTCSessionDescriptionInit, id?: number): SessionDescription;
 export {};
 //# sourceMappingURL=SignalClient.d.ts.map

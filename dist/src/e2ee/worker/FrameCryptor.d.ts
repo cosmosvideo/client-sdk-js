@@ -34,8 +34,8 @@ export declare class FrameCryptor extends BaseFrameCryptor {
      * used for detecting server injected unencrypted frames
      */
     private sifTrailer;
-    private sifGuard;
     private detectedCodec?;
+    private isTransformActive;
     constructor(opts: {
         keys: ParticipantKeyHandler;
         participantIdentity: string;
@@ -64,7 +64,7 @@ export declare class FrameCryptor extends BaseFrameCryptor {
      * @param map
      */
     setRtpMap(map: Map<number, VideoCodec>): void;
-    setupTransform(operation: 'encode' | 'decode', readable: ReadableStream<RTCEncodedVideoFrame | RTCEncodedAudioFrame>, writable: WritableStream<RTCEncodedVideoFrame | RTCEncodedAudioFrame>, trackId: string, codec?: VideoCodec): void;
+    setupTransform(operation: 'encode' | 'decode', readable: ReadableStream<RTCEncodedVideoFrame | RTCEncodedAudioFrame>, writable: WritableStream<RTCEncodedVideoFrame | RTCEncodedAudioFrame>, trackId: string, isReuse: boolean, codec?: VideoCodec): void;
     setSifTrailer(trailer: Uint8Array): void;
     /**
      * Function that will be injected in a stream and will encrypt the given encoded frames.
@@ -126,52 +126,6 @@ export declare class FrameCryptor extends BaseFrameCryptor {
      * inspects frame payloadtype if available and maps it to the codec specified in rtpMap
      */
     private getVideoCodec;
-}
-/**
- * Slice the NALUs present in the supplied buffer, assuming it is already byte-aligned
- * code adapted from https://github.com/medooze/h264-frame-parser/blob/main/lib/NalUnits.ts to return indices only
- */
-export declare function findNALUIndices(stream: Uint8Array): number[];
-export declare function parseNALUType(startByte: number): NALUType;
-export declare enum NALUType {
-    /** Coded slice of a non-IDR picture */
-    SLICE_NON_IDR = 1,
-    /** Coded slice data partition A */
-    SLICE_PARTITION_A = 2,
-    /** Coded slice data partition B */
-    SLICE_PARTITION_B = 3,
-    /** Coded slice data partition C */
-    SLICE_PARTITION_C = 4,
-    /** Coded slice of an IDR picture */
-    SLICE_IDR = 5,
-    /** Supplemental enhancement information */
-    SEI = 6,
-    /** Sequence parameter set */
-    SPS = 7,
-    /** Picture parameter set */
-    PPS = 8,
-    /** Access unit delimiter */
-    AUD = 9,
-    /** End of sequence */
-    END_SEQ = 10,
-    /** End of stream */
-    END_STREAM = 11,
-    /** Filler data */
-    FILLER_DATA = 12,
-    /** Sequence parameter set extension */
-    SPS_EXT = 13,
-    /** Prefix NAL unit */
-    PREFIX_NALU = 14,
-    /** Subset sequence parameter set */
-    SUBSET_SPS = 15,
-    /** Depth parameter set */
-    DPS = 16,
-    /** Coded slice of an auxiliary coded picture without partitioning */
-    SLICE_AUX = 19,
-    /** Coded slice extension */
-    SLICE_EXT = 20,
-    /** Coded slice extension for a depth view component or a 3D-AVC texture view component */
-    SLICE_LAYER_EXT = 21
 }
 /**
  * we use a magic frame trailer to detect whether a frame is injected

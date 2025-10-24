@@ -20,13 +20,15 @@ export default class PCTransport extends EventEmitter {
     private log;
     private loggerOptions;
     private ddExtID;
+    private latestOfferId;
+    private offerLock;
     pendingCandidates: RTCIceCandidateInit[];
     restartingIce: boolean;
     renegotiate: boolean;
     trackBitrates: TrackBitrateInfo[];
     remoteStereoMids: string[];
     remoteNackMids: string[];
-    onOffer?: (offer: RTCSessionDescriptionInit) => void;
+    onOffer?: (offer: RTCSessionDescriptionInit, offerId: number) => void;
     onIceCandidate?: (candidate: RTCIceCandidate) => void;
     onIceCandidateError?: (ev: Event) => void;
     onConnectionStateChange?: (state: RTCPeerConnectionState) => void;
@@ -39,7 +41,7 @@ export default class PCTransport extends EventEmitter {
     private get logContext();
     get isICEConnected(): boolean;
     addIceCandidate(candidate: RTCIceCandidateInit): Promise<void>;
-    setRemoteDescription(sd: RTCSessionDescriptionInit): Promise<void>;
+    setRemoteDescription(sd: RTCSessionDescriptionInit, offerId: number): Promise<boolean>;
     negotiate: {
         (this: unknown, ...args: [onError?: ((e: Error) => void) | undefined] & any[]): Promise<Promise<void>>;
         cancel: (reason?: any) => void;
@@ -48,6 +50,7 @@ export default class PCTransport extends EventEmitter {
     createAndSetAnswer(): Promise<RTCSessionDescriptionInit>;
     createDataChannel(label: string, dataChannelDict: RTCDataChannelInit): RTCDataChannel;
     addTransceiver(mediaStreamTrack: MediaStreamTrack, transceiverInit: RTCRtpTransceiverInit): RTCRtpTransceiver;
+    addTransceiverOfKind(kind: 'audio' | 'video', transceiverInit: RTCRtpTransceiverInit): RTCRtpTransceiver;
     addTrack(track: MediaStreamTrack): RTCRtpSender;
     setTrackCodecBitrate(info: TrackBitrateInfo): void;
     setConfiguration(rtcConfig: RTCConfiguration): void;

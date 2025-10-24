@@ -8,9 +8,11 @@ export default class RemoteTrackPublication extends TrackPublication {
     /** @internal */
     protected allowed: boolean;
     protected subscribed?: boolean;
-    protected disabled: boolean;
-    protected currentVideoQuality?: VideoQuality;
-    protected videoDimensions?: Track.Dimensions;
+    protected requestedDisabled: boolean | undefined;
+    protected visible: boolean;
+    protected videoDimensionsAdaptiveStream?: Track.Dimensions;
+    protected requestedVideoDimensions?: Track.Dimensions;
+    protected requestedMaxQuality?: VideoQuality;
     protected fps?: number;
     protected subscriptionError?: SubscriptionError;
     constructor(kind: Track.Kind, ti: TrackInfo, autoSubscribe: boolean | undefined, loggerOptions?: LoggerOptions);
@@ -43,6 +45,13 @@ export default class RemoteTrackPublication extends TrackPublication {
      * optimize for uninterrupted video
      */
     setVideoQuality(quality: VideoQuality): void;
+    /**
+     * Explicitly set the video dimensions for this track.
+     *
+     * This will take precedence over adaptive stream dimensions.
+     *
+     * @param dimensions The video dimensions to set.
+     */
     setVideoDimensions(dimensions: Track.Dimensions): void;
     setVideoFPS(fps: number): void;
     get videoQuality(): VideoQuality | undefined;

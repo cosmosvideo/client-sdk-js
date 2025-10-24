@@ -37,5 +37,6 @@ export default class LocalTrackPublication extends TrackPublication {
     resumeUpstream(): Promise<void>;
     getTrackFeatures(): AudioTrackFeature[];
     handleTrackEnded: () => void;
+    private handleCpuConstrained;
 }
 //# sourceMappingURL=LocalTrackPublication.d.ts.map

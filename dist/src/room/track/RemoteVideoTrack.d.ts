@@ -11,6 +11,7 @@ export default class RemoteVideoTrack extends RemoteTrack<Track.Kind.Video> {
     private lastDimensions?;
     constructor(mediaTrack: MediaStreamTrack, sid: string, receiver: RTCRtpReceiver, adaptiveStreamSettings?: AdaptiveStreamSettings, loggerOptions?: LoggerOptions);
     get isAdaptiveStream(): boolean;
+    setStreamState(value: Track.StreamState): void;
     /**
      * Note: When using adaptiveStream, you need to use remoteVideoTrack.attach() to add the track to a HTMLVideoElement, otherwise your video tracks might never start
      */

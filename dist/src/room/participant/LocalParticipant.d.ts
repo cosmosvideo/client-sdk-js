@@ -1,13 +1,14 @@
-import { Codec, ParticipantInfo, ParticipantPermission } from '@livekit/protocol';
+import { Codec, ParticipantInfo } from '@livekit/protocol';
 import type { InternalRoomOptions } from '../../options';
 import type RTCEngine from '../RTCEngine';
-import { ByteStreamWriter, TextStreamWriter } from '../StreamWriter';
+import type OutgoingDataStreamManager from '../data-stream/outgoing/OutgoingDataStreamManager';
+import type { TextStreamWriter } from '../data-stream/outgoing/StreamWriter';
 import { type PerformRpcParams, type RpcInvocationData } from '../rpc';
 import LocalTrack from '../track/LocalTrack';
 import LocalTrackPublication from '../track/LocalTrackPublication';
 import { Track } from '../track/Track';
 import type { AudioCaptureOptions, BackupVideoCodec, CreateLocalTracksOptions, ScreenShareCaptureOptions, TrackPublishOptions, VideoCaptureOptions } from '../track/options';
-import { type ChatMessage, type DataPublishOptions, type SendTextOptions, type StreamTextOptions, type TextStreamInfo } from '../types';
+import { type ChatMessage, type DataPublishOptions, type SendFileOptions, type SendTextOptions, type StreamBytesOptions, type StreamTextOptions, type TextStreamInfo } from '../types';
 import Participant from './Participant';
 import type { ParticipantTrackPermission } from './ParticipantTrackPermission';
 import type RemoteParticipant from './RemoteParticipant';
@@ -34,12 +35,13 @@ export default class LocalParticipant extends Participant {
     private activeAgentFuture?;
     private firstActiveAgent?;
     private rpcHandlers;
+    private roomOutgoingDataStreamManager;
     private pendingSignalRequests;
     private enabledPublishVideoCodecs;
     private pendingAcks;
     private pendingResponses;
     /** @internal */
-    constructor(sid: string, identity: string, engine: RTCEngine, options: InternalRoomOptions, roomRpcHandlers: Map<string, (data: RpcInvocationData) => Promise<string>>);
+    constructor(sid: string, identity: string, engine: RTCEngine, options: InternalRoomOptions, roomRpcHandlers: Map<string, (data: RpcInvocationData) => Promise<string>>, roomOutgoingDataStreamManager: OutgoingDataStreamManager);
     get lastCameraError(): Error | undefined;
     get lastMicrophoneError(): Error | undefined;
     get isE2EEEnabled(): boolean;
@@ -51,7 +53,7 @@ export default class LocalParticipant extends Participant {
     setupEngine(engine: RTCEngine): void;
     private handleReconnecting;
     private handleReconnected;
-    private handleDisconnected;
+    private handleClosing;
     private handleSignalConnected;
     private handleSignalRequestResponse;
     private handleDataPacket;
@@ -96,8 +98,6 @@ export default class LocalParticipant extends Participant {
      * Resolves with a `LocalTrackPublication` instance if successful and `undefined` otherwise
      */
     setScreenShareEnabled(enabled: boolean, options?: ScreenShareCaptureOptions, publishOptions?: TrackPublishOptions): Promise<LocalTrackPublication | undefined>;
-    /** @internal */
-    setPermissions(permissions: ParticipantPermission): boolean;
     /** @internal */
     setE2EEEnabled(enabled: boolean): Promise<void>;
     /**
@@ -156,7 +156,9 @@ export default class LocalParticipant extends Participant {
      * @param digit DTMF digit
      */
     publishDtmf(code: number, digit: string): Promise<void>;
+    /** @deprecated Consider migrating to {@link sendText} */
     sendChatMessage(text: string, options?: SendTextOptions): Promise<ChatMessage>;
+    /** @deprecated Consider migrating to {@link sendText} */
     editChatMessage(editText: string, originalMessage: ChatMessage): Promise<{
         readonly message: string;
         readonly editTimestamp: number;
@@ -164,30 +166,39 @@ export default class LocalParticipant extends Participant {
         readonly timestamp: number;
         readonly attachedFiles?: Array<File>;
     }>;
+    /**
+     * Sends the given string to participants in the room via the data channel.
+     * For longer messages, consider using {@link streamText} instead.
+     *
+     * @param text The text payload
+     * @param options.topic Topic identifier used to route the stream to appropriate handlers.
+     */
     sendText(text: string, options?: SendTextOptions): Promise<TextStreamInfo>;
     /**
+     * Creates a new TextStreamWriter which can be used to stream text incrementally
+     * to participants in the room via the data channel.
+     *
+     * @param options.topic Topic identifier used to route the stream to appropriate handlers.
+     *
      * @internal
      * @experimental CAUTION, might get removed in a minor release
      */
     streamText(options?: StreamTextOptions): Promise<TextStreamWriter>;
-    sendFile(file: File, options?: {
-        mimeType?: string;
-        topic?: string;
-        destinationIdentities?: Array<string>;
-        onProgress?: (progress: number) => void;
-    }): Promise<{
+    /** Send a File to all participants in the room via the data channel.
+     * @param file The File object payload
+     * @param options.topic Topic identifier used to route the stream to appropriate handlers.
+     * @param options.onProgress A callback function used to monitor the upload progress percentage.
+     */
+    sendFile(file: File, options?: SendFileOptions): Promise<{
         id: string;
     }>;
-    private _sendFile;
-    streamBytes(options?: {
-        name?: string;
-        topic?: string;
-        attributes?: Record<string, string>;
-        destinationIdentities?: Array<string>;
-        streamId?: string;
-        mimeType?: string;
-        totalSize?: number;
-    }): Promise<ByteStreamWriter>;
+    /**
+     * Stream bytes incrementally to participants in the room via the data channel.
+     * For sending files, consider using {@link sendFile} instead.
+     *
+     * @param options.topic Topic identifier used to route the stream to appropriate handlers.
+     */
+    streamBytes(options?: StreamBytesOptions): Promise<import("../data-stream/outgoing/StreamWriter").ByteStreamWriter>;
     /**
      * Initiate an RPC call to a remote participant
      * @param params - Parameters for initiating the RPC call, see {@link PerformRpcParams}
@@ -242,6 +253,7 @@ export default class LocalParticipant extends Participant {
     private onTrackUpstreamPaused;
     private onTrackUpstreamResumed;
     private onTrackFeatureUpdate;
+    private onTrackCpuConstrained;
     private handleSubscribedQualityUpdate;
     private handleLocalTrackUnpublished;
     private handleTrackEnded;

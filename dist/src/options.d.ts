@@ -68,16 +68,24 @@ export interface InternalRoomOptions {
      * allows for passing in your own AudioContext instance, too
      */
     webAudioMix: boolean | WebAudioSettings;
+    e2ee?: E2EEOptions;
     /**
      * @experimental
+     * Options for enabling end-to-end encryption.
      */
-    e2ee?: E2EEOptions;
+    encryption?: E2EEOptions;
     loggerName?: string;
+    /**
+     * @experimental
+     * only supported on LiveKit Cloud
+     * and LiveKit OSS >= 1.9.2
+     */
+    singlePeerConnection: boolean;
 }
 /**
  * Options for when creating a new room
  */
-export interface RoomOptions extends Partial<InternalRoomOptions> {
+export interface RoomOptions extends Partial<Omit<InternalRoomOptions, 'encryption'>> {
 }
 /**
  * @internal

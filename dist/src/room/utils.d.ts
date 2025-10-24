@@ -14,7 +14,7 @@ import type RemoteTrackPublication from './track/RemoteTrackPublication';
 import type RemoteVideoTrack from './track/RemoteVideoTrack';
 import { Track } from './track/Track';
 import type { TrackPublication } from './track/TrackPublication';
-import { type VideoCodec } from './track/options';
+import { type AudioCodec, type VideoCodec } from './track/options';
 import type { ChatMessage, TranscriptionSegment } from './types';
 export declare const ddExtensionURI = "https://aomediacodec.github.io/av1-rtp-spec/#dependency-descriptor-rtp-header-extension";
 export declare function unpackStreamId(packed: string): string[];
@@ -27,14 +27,20 @@ export declare function supportsAdaptiveStream(): boolean;
 export declare function supportsDynacast(): boolean;
 export declare function supportsAV1(): boolean;
 export declare function supportsVP9(): boolean;
+export declare function supportsH265(): boolean;
 export declare function isSVCCodec(codec?: string): boolean;
 export declare function supportsSetSinkId(elm?: HTMLMediaElement): boolean;
+/**
+ * Checks whether or not setting an audio output via {@link Room#setActiveDevice}
+ * is supported for the current browser.
+ */
+export declare function supportsAudioOutputSelection(): boolean;
 export declare function isBrowserSupported(): boolean;
 export declare function isFireFox(): boolean;
 export declare function isChromiumBased(): boolean;
 export declare function isSafari(): boolean;
 export declare function isSafariBased(): boolean;
-export declare function isSafari17(): boolean;
+export declare function isSafari17Based(): boolean;
 export declare function isSafariSvcApi(browser?: BrowserDetails): boolean;
 export declare function isMobile(): boolean;
 export declare function isE2EESimulcastSupported(): boolean | undefined;
@@ -43,6 +49,14 @@ export declare function isReactNative(): boolean;
 export declare function isCloud(serverUrl: URL): boolean;
 export declare function getReactNativeOs(): string | undefined;
 export declare function getDevicePixelRatio(): number;
+/**
+ * @param v1 - The first version string to compare.
+ * @param v2 - The second version string to compare.
+ * @returns A number indicating the order of the versions:
+ *   - 1 if v1 is greater than v2
+ *   - -1 if v1 is less than v2
+ *   - 0 if v1 and v2 are equal
+ */
 export declare function compareVersions(v1: string, v2: string): number;
 export declare const getResizeObserver: () => ResizeObserver;
 export declare const getIntersectionObserver: () => IntersectionObserver;
@@ -54,11 +68,14 @@ export declare function getClientInfo(): ClientInfo;
 export declare function getEmptyVideoStreamTrack(): MediaStreamTrack;
 export declare function createDummyVideoStreamTrack(width?: number, height?: number, enabled?: boolean, paintContent?: boolean): MediaStreamTrack;
 export declare function getEmptyAudioStreamTrack(): MediaStreamTrack;
+export declare function getStereoAudioStreamTrack(): MediaStreamTrack;
 export declare class Future<T> {
     promise: Promise<T>;
     resolve?: (arg: T) => void;
     reject?: (e: any) => void;
     onFinally?: () => void;
+    get isResolved(): boolean;
+    private _isResolved;
     constructor(futureBase?: (resolve: (arg: T) => void, reject: (e: any) => void) => void, onFinally?: () => void);
 }
 export type AudioAnalyserOptions = {
@@ -95,6 +112,7 @@ export declare function createAudioAnalyser(track: LocalAudioTrack | RemoteAudio
     analyser: AnalyserNode;
     cleanup: () => Promise<void>;
 };
+export declare function isAudioCodec(maybeCodec: string): maybeCodec is AudioCodec;
 export declare function isVideoCodec(maybeCodec: string): maybeCodec is VideoCodec;
 export declare function unwrapConstraint(constraint: ConstrainDOMString): string;
 export declare function unwrapConstraint(constraint: ConstrainULong): number;
@@ -119,4 +137,5 @@ export declare function isRemoteVideoTrack(track: Track | undefined): track is R
 export declare function isLocalParticipant(p: Participant): p is LocalParticipant;
 export declare function isRemoteParticipant(p: Participant): p is RemoteParticipant;
 export declare function splitUtf8(s: string, n: number): Uint8Array[];
+export declare function extractMaxAgeFromRequestHeaders(headers: Headers): number | undefined;
 //# sourceMappingURL=utils.d.ts.map

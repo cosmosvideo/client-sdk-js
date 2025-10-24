@@ -150,6 +150,10 @@ export interface VideoCaptureOptions {
      */
     deviceId?: ConstrainDOMString;
     /**
+     * A ConstrainDouble specifying the frame rate or range of frame rates which are acceptable and/or required.
+     */
+    frameRate?: ConstrainDouble;
+    /**
      * a facing or an array of facings which are acceptable and/or required.
      */
     facingMode?: 'user' | 'environment' | 'left' | 'right';
@@ -287,11 +291,15 @@ export interface AudioPreset {
     maxBitrate: number;
     priority?: RTCPriorityType;
 }
-declare const backupCodecs: readonly ["vp8", "h264"];
-export declare const videoCodecs: readonly ["vp8", "h264", "vp9", "av1"];
+export declare const audioCodecs: readonly ["opus", "red"];
+export type AudioCodec = (typeof audioCodecs)[number];
+declare const backupVideoCodecs: readonly ["vp8", "h264"];
+export declare const videoCodecs: readonly ["vp8", "h264", "vp9", "av1", "h265"];
 export type VideoCodec = (typeof videoCodecs)[number];
-export type BackupVideoCodec = (typeof backupCodecs)[number];
-export declare function isBackupCodec(codec: string): codec is BackupVideoCodec;
+export type BackupVideoCodec = (typeof backupVideoCodecs)[number];
+export declare function isBackupVideoCodec(codec: string): codec is BackupVideoCodec;
+/** @deprecated Use {@link isBackupVideoCodec} instead */
+export declare const isBackupCodec: typeof isBackupVideoCodec;
 export declare enum BackupCodecPolicy {
     PREFER_REGRESSION = 0,
     SIMULCAST = 1,

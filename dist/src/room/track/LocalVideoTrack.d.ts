@@ -21,6 +21,8 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
     private subscribedCodecs?;
     private senderLock;
     private degradationPreference;
+    private isCpuConstrained;
+    private optimizeForPerformance;
     get sender(): RTCRtpSender | undefined;
     set sender(sender: RTCRtpSender | undefined);
     /**
@@ -56,6 +58,11 @@ export default class LocalVideoTrack extends LocalTrack<Track.Kind.Video> {
      * Sets layers that should be publishing
      */
     setPublishingLayers(isSvc: boolean, qualities: SubscribedQuality[]): Promise<void>;
+    /**
+     * Designed for lower powered devices, reduces video publishing quality and disables simulcast.
+     * @experimental
+     */
+    prioritizePerformance(): Promise<void>;
     protected monitorSender: () => Promise<void>;
     protected handleAppVisibilityChanged(): Promise<void>;
 }

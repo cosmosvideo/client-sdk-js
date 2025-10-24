@@ -2,12 +2,16 @@ import type TypedEventEmitter from 'typed-emitter';
 import type RTCEngine from '../room/RTCEngine';
 import type Room from '../room/Room';
 import { type E2EEManagerCallbacks } from './events';
-import type { E2EEManagerOptions } from './types';
+import type { DecryptDataResponseMessage, E2EEManagerOptions, EncryptDataResponseMessage } from './types';
 export interface BaseE2EEManager {
     setup(room: Room): void;
     setupEngine(engine: RTCEngine): void;
+    isEnabled: boolean;
+    isDataChannelEncryptionEnabled: boolean;
     setParticipantCryptorEnabled(enabled: boolean, participantIdentity: string): void;
     setSifTrailer(trailer: Uint8Array): void;
+    encryptData(data: Uint8Array): Promise<EncryptDataResponseMessage['data']>;
+    handleEncryptedData(payload: Uint8Array, iv: Uint8Array, participantIdentity: string, keyIndex: number): Promise<DecryptDataResponseMessage['data']>;
     on<E extends keyof E2EEManagerCallbacks>(event: E, listener: E2EEManagerCallbacks[E]): this;
 }
 declare const E2EEManager_base: new () => TypedEventEmitter<E2EEManagerCallbacks>;
@@ -19,7 +23,12 @@ export declare class E2EEManager extends E2EEManager_base implements BaseE2EEMan
     protected room?: Room;
     private encryptionEnabled;
     private keyProvider;
-    constructor(options: E2EEManagerOptions);
+    private decryptDataRequests;
+    private encryptDataRequests;
+    private dataChannelEncryptionEnabled;
+    constructor(options: E2EEManagerOptions, dcEncryptionEnabled: boolean);
+    get isEnabled(): boolean;
+    get isDataChannelEncryptionEnabled(): boolean;
     /**
      * @internal
      */
@@ -36,6 +45,11 @@ export declare class E2EEManager extends E2EEManager_base implements BaseE2EEMan
     private onWorkerError;
     setupEngine(engine: RTCEngine): void;
     private setupEventListeners;
+    encryptData(data: Uint8Array): Promise<EncryptDataResponseMessage['data']>;
+    handleEncryptedData(payload: Uint8Array, iv: Uint8Array, participantIdentity: string, keyIndex: number): Promise<{
+        uuid: string;
+        payload: Uint8Array;
+    }>;
     private postRatchetRequest;
     private postKey;
     private postEnable;

@@ -1,9 +1,9 @@
-import { DataPacket_Kind, DisconnectReason, MetricsBatch, ParticipantPermission, ServerInfo, SipDTMF, SubscriptionError, TranscriptionSegment as TranscriptionSegmentModel } from '@livekit/protocol';
+import { DataPacket_Kind, DisconnectReason, Encryption_Type, MetricsBatch, ParticipantPermission, ServerInfo, SipDTMF, SubscriptionError, TranscriptionSegment as TranscriptionSegmentModel } from '@livekit/protocol';
 import type TypedEmitter from 'typed-emitter';
 import 'webrtc-adapter';
 import type { InternalRoomOptions, RoomConnectOptions, RoomOptions } from '../options';
 import RTCEngine from './RTCEngine';
-import { type ByteStreamHandler, type TextStreamHandler } from './StreamReader';
+import { type ByteStreamHandler, type TextStreamHandler } from './data-stream/incoming/StreamReader';
 import LocalParticipant from './participant/LocalParticipant';
 import type Participant from './participant/Participant';
 import { type ConnectionQuality } from './participant/Participant';
@@ -74,11 +74,10 @@ declare class Room extends Room_base {
      * map to store first point in time when a particular transcription segment was received
      */
     private transcriptionReceivedTimes;
-    private byteStreamControllers;
-    private textStreamControllers;
-    private byteStreamHandlers;
-    private textStreamHandlers;
+    private incomingDataStreamManager;
+    private outgoingDataStreamManager;
     private rpcHandlers;
+    get hasE2EESetup(): boolean;
     /**
      * Creates a new Room, the primary construct for a LiveKit session.
      * @param options
@@ -121,7 +120,6 @@ declare class Room extends Room_base {
      * @param method - The name of the RPC method to unregister
      */
     unregisterRpcMethod(method: string): void;
-    private handleIncomingRpcRequest;
     /**
      * @experimental
      */
@@ -226,15 +224,14 @@ declare class Room extends Room_base {
     private handleSubscriptionPermissionUpdate;
     private handleSubscriptionError;
     private handleDataPacket;
-    private handleStreamHeader;
-    private handleStreamChunk;
-    private handleStreamTrailer;
     private handleUserPacket;
     private handleSipDtmf;
-    bufferedSegments: Map<string, TranscriptionSegmentModel>;
     private handleTranscription;
     private handleChatMessage;
     private handleMetrics;
+    private handleDataStream;
+    private handleIncomingRpcRequest;
+    bufferedSegments: Map<string, TranscriptionSegmentModel>;
     private handleAudioPlaybackStarted;
     private handleAudioPlaybackFailed;
     private handleVideoPlaybackStarted;
@@ -286,7 +283,7 @@ export type RoomEventCallbacks = {
     reconnected: () => void;
     disconnected: (reason?: DisconnectReason) => void;
     connectionStateChanged: (state: ConnectionState) => void;
-    moved: (name: string, token: string) => void;
+    moved: (name: string) => void;
     mediaDevicesChanged: () => void;
     participantConnected: (participant: RemoteParticipant) => void;
     participantDisconnected: (participant: RemoteParticipant) => void;
@@ -306,7 +303,7 @@ export type RoomEventCallbacks = {
     participantAttributesChanged: (changedAttributes: Record<string, string>, participant: RemoteParticipant | LocalParticipant) => void;
     activeSpeakersChanged: (speakers: Array<Participant>) => void;
     roomMetadataChanged: (metadata: string) => void;
-    dataReceived: (payload: Uint8Array, participant?: RemoteParticipant, kind?: DataPacket_Kind, topic?: string) => void;
+    dataReceived: (payload: Uint8Array, participant?: RemoteParticipant, kind?: DataPacket_Kind, topic?: string, encryptionType?: Encryption_Type) => void;
     sipDTMFReceived: (dtmf: SipDTMF, participant?: RemoteParticipant) => void;
     transcriptionReceived: (transcription: TranscriptionSegment[], participant?: Participant, publication?: TrackPublication) => void;
     connectionQualityChanged: (quality: ConnectionQuality, participant: Participant) => void;

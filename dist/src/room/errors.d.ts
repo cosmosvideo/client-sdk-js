@@ -46,6 +46,20 @@ export declare class SignalRequestError extends LivekitError {
     reasonName: string;
     constructor(message: string, reason: RequestErrorReason);
 }
+export declare enum DataStreamErrorReason {
+    AlreadyOpened = 0,
+    AbnormalEnd = 1,
+    DecodeFailed = 2,
+    LengthExceeded = 3,
+    Incomplete = 4,
+    HandlerAlreadyRegistered = 7,
+    EncryptionTypeMismatch = 8
+}
+export declare class DataStreamError extends LivekitError {
+    reason: DataStreamErrorReason;
+    reasonName: string;
+    constructor(message: string, reason: DataStreamErrorReason);
+}
 export declare enum MediaDeviceFailure {
     PermissionDenied = "PermissionDenied",
     NotFound = "NotFound",

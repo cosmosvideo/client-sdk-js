@@ -369,6 +369,7 @@ var LoggerNames;
 (function (LoggerNames) {
   LoggerNames["Default"] = "livekit";
   LoggerNames["Room"] = "livekit-room";
+  LoggerNames["TokenSource"] = "livekit-token-source";
   LoggerNames["Participant"] = "livekit-participant";
   LoggerNames["Track"] = "livekit-track";
   LoggerNames["Publication"] = "livekit-track-publication";
@@ -484,8 +485,6 @@ const KEY_PROVIDER_DEFAULTS = {
   failureTolerance: DECRYPTION_FAILURE_TOLERANCE,
   keyringSize: 16
 };
-const MAX_SIF_COUNT = 100;
-const MAX_SIF_DURATION = 2000;
 
 class LivekitError extends Error {
   constructor(code, message) {
@@ -503,6 +502,24 @@ var ConnectionErrorReason;
   ConnectionErrorReason[ConnectionErrorReason["LeaveRequest"] = 4] = "LeaveRequest";
   ConnectionErrorReason[ConnectionErrorReason["Timeout"] = 5] = "Timeout";
 })(ConnectionErrorReason || (ConnectionErrorReason = {}));
+// NOTE: matches with https://github.com/livekit/client-sdk-swift/blob/f37bbd260d61e165084962db822c79f995f1a113/Sources/LiveKit/DataStream/StreamError.swift#L17
+var DataStreamErrorReason;
+(function (DataStreamErrorReason) {
+  // Unable to open a stream with the same ID more than once.
+  DataStreamErrorReason[DataStreamErrorReason["AlreadyOpened"] = 0] = "AlreadyOpened";
+  // Stream closed abnormally by remote participant.
+  DataStreamErrorReason[DataStreamErrorReason["AbnormalEnd"] = 1] = "AbnormalEnd";
+  // Incoming chunk data could not be decoded.
+  DataStreamErrorReason[DataStreamErrorReason["DecodeFailed"] = 2] = "DecodeFailed";
+  // Read length exceeded total length specified in stream header.
+  DataStreamErrorReason[DataStreamErrorReason["LengthExceeded"] = 3] = "LengthExceeded";
+  // Read length less than total length specified in stream header.
+  DataStreamErrorReason[DataStreamErrorReason["Incomplete"] = 4] = "Incomplete";
+  // Unable to register a stream handler more than once.
+  DataStreamErrorReason[DataStreamErrorReason["HandlerAlreadyRegistered"] = 7] = "HandlerAlreadyRegistered";
+  // Encryption type mismatch.
+  DataStreamErrorReason[DataStreamErrorReason["EncryptionTypeMismatch"] = 8] = "EncryptionTypeMismatch";
+})(DataStreamErrorReason || (DataStreamErrorReason = {}));
 var MediaDeviceFailure;
 (function (MediaDeviceFailure) {
   // user rejected permissions
@@ -571,6 +588,218 @@ var CryptorEvent;
 (function (CryptorEvent) {
   CryptorEvent["Error"] = "cryptorError";
 })(CryptorEvent || (CryptorEvent = {}));
+
+function isVideoFrame(frame) {
+  return 'type' in frame;
+}
+function importKey(keyBytes_1) {
+  return __awaiter(this, arguments, void 0, function (keyBytes) {
+    let algorithm = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {
+      name: ENCRYPTION_ALGORITHM
+    };
+    let usage = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 'encrypt';
+    return function* () {
+      // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey
+      return crypto.subtle.importKey('raw', keyBytes, algorithm, false, usage === 'derive' ? ['deriveBits', 'deriveKey'] : ['encrypt', 'decrypt']);
+    }();
+  });
+}
+function getAlgoOptions(algorithmName, salt) {
+  const textEncoder = new TextEncoder();
+  const encodedSalt = textEncoder.encode(salt);
+  switch (algorithmName) {
+    case 'HKDF':
+      return {
+        name: 'HKDF',
+        salt: encodedSalt,
+        hash: 'SHA-256',
+        info: new ArrayBuffer(128)
+      };
+    case 'PBKDF2':
+      {
+        return {
+          name: 'PBKDF2',
+          salt: encodedSalt,
+          hash: 'SHA-256',
+          iterations: 100000
+        };
+      }
+    default:
+      throw new Error("algorithm ".concat(algorithmName, " is currently unsupported"));
+  }
+}
+/**
+ * Derives a set of keys from the master key.
+ * See https://tools.ietf.org/html/draft-omara-sframe-00#section-4.3.1
+ */
+function deriveKeys(material, salt) {
+  return __awaiter(this, void 0, void 0, function* () {
+    const algorithmOptions = getAlgoOptions(material.algorithm.name, salt);
+    // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey#HKDF
+    // https://developer.mozilla.org/en-US/docs/Web/API/HkdfParams
+    const encryptionKey = yield crypto.subtle.deriveKey(algorithmOptions, material, {
+      name: ENCRYPTION_ALGORITHM,
+      length: 128
+    }, false, ['encrypt', 'decrypt']);
+    return {
+      material,
+      encryptionKey
+    };
+  });
+}
+/**
+ * Ratchets a key. See
+ * https://tools.ietf.org/html/draft-omara-sframe-00#section-4.3.5.1
+ */
+function ratchet(material, salt) {
+  return __awaiter(this, void 0, void 0, function* () {
+    const algorithmOptions = getAlgoOptions(material.algorithm.name, salt);
+    // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits
+    return crypto.subtle.deriveBits(algorithmOptions, material, 256);
+  });
+}
+function needsRbspUnescaping(frameData) {
+  for (var i = 0; i < frameData.length - 3; i++) {
+    if (frameData[i] == 0 && frameData[i + 1] == 0 && frameData[i + 2] == 3) return true;
+  }
+  return false;
+}
+function parseRbsp(stream) {
+  const dataOut = [];
+  var length = stream.length;
+  for (var i = 0; i < stream.length;) {
+    // Be careful about over/underflow here. byte_length_ - 3 can underflow, and
+    // i + 3 can overflow, but byte_length_ - i can't, because i < byte_length_
+    // above, and that expression will produce the number of bytes left in
+    // the stream including the byte at i.
+    if (length - i >= 3 && !stream[i] && !stream[i + 1] && stream[i + 2] == 3) {
+      // Two rbsp bytes.
+      dataOut.push(stream[i++]);
+      dataOut.push(stream[i++]);
+      // Skip the emulation byte.
+      i++;
+    } else {
+      // Single rbsp byte.
+      dataOut.push(stream[i++]);
+    }
+  }
+  return new Uint8Array(dataOut);
+}
+const kZerosInStartSequence = 2;
+const kEmulationByte = 3;
+function writeRbsp(data_in) {
+  const dataOut = [];
+  var numConsecutiveZeros = 0;
+  for (var i = 0; i < data_in.length; ++i) {
+    var byte = data_in[i];
+    if (byte <= kEmulationByte && numConsecutiveZeros >= kZerosInStartSequence) {
+      // Need to escape.
+      dataOut.push(kEmulationByte);
+      numConsecutiveZeros = 0;
+    }
+    dataOut.push(byte);
+    if (byte == 0) {
+      ++numConsecutiveZeros;
+    } else {
+      numConsecutiveZeros = 0;
+    }
+  }
+  return new Uint8Array(dataOut);
+}
+
+class DataCryptor {
+  static makeIV(timestamp) {
+    const iv = new ArrayBuffer(12);
+    const ivView = new DataView(iv);
+    const randomBytes = crypto.getRandomValues(new Uint32Array(1));
+    ivView.setUint32(0, randomBytes[0]);
+    ivView.setUint32(4, timestamp);
+    ivView.setUint32(8, timestamp - DataCryptor.sendCount % 0xffff);
+    DataCryptor.sendCount++;
+    return iv;
+  }
+  static encrypt(data, keys) {
+    return __awaiter(this, void 0, void 0, function* () {
+      const iv = DataCryptor.makeIV(performance.now());
+      const keySet = yield keys.getKeySet();
+      if (!keySet) {
+        throw new Error('No key set found');
+      }
+      const cipherText = yield crypto.subtle.encrypt({
+        name: ENCRYPTION_ALGORITHM,
+        iv
+      }, keySet.encryptionKey, new Uint8Array(data));
+      return {
+        payload: new Uint8Array(cipherText),
+        iv: new Uint8Array(iv),
+        keyIndex: keys.getCurrentKeyIndex()
+      };
+    });
+  }
+  static decrypt(data_1, iv_1, keys_1) {
+    return __awaiter(this, arguments, void 0, function (data, iv, keys) {
+      let keyIndex = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 0;
+      let initialMaterial = arguments.length > 4 ? arguments[4] : undefined;
+      let ratchetOpts = arguments.length > 5 && arguments[5] !== undefined ? arguments[5] : {
+        ratchetCount: 0
+      };
+      return function* () {
+        const keySet = yield keys.getKeySet(keyIndex);
+        if (!keySet) {
+          throw new Error('No key set found');
+        }
+        try {
+          const plainText = yield crypto.subtle.decrypt({
+            name: ENCRYPTION_ALGORITHM,
+            iv
+          }, keySet.encryptionKey, new Uint8Array(data));
+          return {
+            payload: new Uint8Array(plainText)
+          };
+        } catch (error) {
+          if (keys.keyProviderOptions.ratchetWindowSize > 0) {
+            if (ratchetOpts.ratchetCount < keys.keyProviderOptions.ratchetWindowSize) {
+              workerLogger.debug("DataCryptor: ratcheting key attempt ".concat(ratchetOpts.ratchetCount, " of ").concat(keys.keyProviderOptions.ratchetWindowSize, ", for data packet"));
+              let ratchetedKeySet;
+              let ratchetResult;
+              if ((initialMaterial !== null && initialMaterial !== void 0 ? initialMaterial : keySet) === keys.getKeySet(keyIndex)) {
+                // only ratchet if the currently set key is still the same as the one used to decrypt this frame
+                // if not, it might be that a different frame has already ratcheted and we try with that one first
+                ratchetResult = yield keys.ratchetKey(keyIndex, false);
+                ratchetedKeySet = yield deriveKeys(ratchetResult.cryptoKey, keys.keyProviderOptions.ratchetSalt);
+              }
+              const decryptedData = yield DataCryptor.decrypt(data, iv, keys, keyIndex, initialMaterial, {
+                ratchetCount: ratchetOpts.ratchetCount + 1,
+                encryptionKey: ratchetedKeySet === null || ratchetedKeySet === void 0 ? void 0 : ratchetedKeySet.encryptionKey
+              });
+              if (decryptedData && ratchetedKeySet) {
+                // before updating the keys, make sure that the keySet used for this frame is still the same as the currently set key
+                // if it's not, a new key might have been set already, which we don't want to override
+                if ((initialMaterial !== null && initialMaterial !== void 0 ? initialMaterial : keySet) === keys.getKeySet(keyIndex)) {
+                  keys.setKeySet(ratchetedKeySet, keyIndex, ratchetResult);
+                  // decryption was successful, set the new key index to reflect the ratcheted key set
+                  keys.setCurrentKeyIndex(keyIndex);
+                }
+              }
+              return decryptedData;
+            } else {
+              /**
+               * Because we only set a new key once decryption has been successful,
+               * we can be sure that we don't need to reset the key to the initial material at this point
+               * as the key has not been updated on the keyHandler instance
+               */
+              workerLogger.warn('DataCryptor: maximum ratchet attempts exceeded');
+              throw new CryptorError("DataCryptor: valid key missing for participant ".concat(keys.participantIdentity), CryptorErrorReason.InvalidKey, keys.participantIdentity);
+            }
+          } else {
+            throw new CryptorError("DataCryptor: Decryption failed: ".concat(error.message), CryptorErrorReason.InvalidKey, keys.participantIdentity);
+          }
+        }
+      }();
+    });
+  }
+}
+DataCryptor.sendCount = 0;
 
 var events = {exports: {}};
 
@@ -959,158 +1188,307 @@ function requireEvents() {
 
 var eventsExports = requireEvents();
 
-function isVideoFrame(frame) {
-  return 'type' in frame;
+/**
+ * NALU (Network Abstraction Layer Unit) utilities for H.264 and H.265 video processing
+ * Contains functions for parsing and working with NALUs in video frames
+ */
+/**
+ * Mask for extracting NALU type from H.264 header byte
+ */
+const kH264NaluTypeMask = 0x1f;
+/**
+ * H.264 NALU types according to RFC 6184
+ */
+var H264NALUType;
+(function (H264NALUType) {
+  /** Coded slice of a non-IDR picture */
+  H264NALUType[H264NALUType["SLICE_NON_IDR"] = 1] = "SLICE_NON_IDR";
+  /** Coded slice data partition A */
+  H264NALUType[H264NALUType["SLICE_PARTITION_A"] = 2] = "SLICE_PARTITION_A";
+  /** Coded slice data partition B */
+  H264NALUType[H264NALUType["SLICE_PARTITION_B"] = 3] = "SLICE_PARTITION_B";
+  /** Coded slice data partition C */
+  H264NALUType[H264NALUType["SLICE_PARTITION_C"] = 4] = "SLICE_PARTITION_C";
+  /** Coded slice of an IDR picture */
+  H264NALUType[H264NALUType["SLICE_IDR"] = 5] = "SLICE_IDR";
+  /** Supplemental enhancement information */
+  H264NALUType[H264NALUType["SEI"] = 6] = "SEI";
+  /** Sequence parameter set */
+  H264NALUType[H264NALUType["SPS"] = 7] = "SPS";
+  /** Picture parameter set */
+  H264NALUType[H264NALUType["PPS"] = 8] = "PPS";
+  /** Access unit delimiter */
+  H264NALUType[H264NALUType["AUD"] = 9] = "AUD";
+  /** End of sequence */
+  H264NALUType[H264NALUType["END_SEQ"] = 10] = "END_SEQ";
+  /** End of stream */
+  H264NALUType[H264NALUType["END_STREAM"] = 11] = "END_STREAM";
+  /** Filler data */
+  H264NALUType[H264NALUType["FILLER_DATA"] = 12] = "FILLER_DATA";
+  /** Sequence parameter set extension */
+  H264NALUType[H264NALUType["SPS_EXT"] = 13] = "SPS_EXT";
+  /** Prefix NAL unit */
+  H264NALUType[H264NALUType["PREFIX_NALU"] = 14] = "PREFIX_NALU";
+  /** Subset sequence parameter set */
+  H264NALUType[H264NALUType["SUBSET_SPS"] = 15] = "SUBSET_SPS";
+  /** Depth parameter set */
+  H264NALUType[H264NALUType["DPS"] = 16] = "DPS";
+  // 17, 18 reserved
+  /** Coded slice of an auxiliary coded picture without partitioning */
+  H264NALUType[H264NALUType["SLICE_AUX"] = 19] = "SLICE_AUX";
+  /** Coded slice extension */
+  H264NALUType[H264NALUType["SLICE_EXT"] = 20] = "SLICE_EXT";
+  /** Coded slice extension for a depth view component or a 3D-AVC texture view component */
+  H264NALUType[H264NALUType["SLICE_LAYER_EXT"] = 21] = "SLICE_LAYER_EXT";
+  // 22, 23 reserved
+})(H264NALUType || (H264NALUType = {}));
+/**
+ * H.265/HEVC NALU types according to ITU-T H.265
+ */
+var H265NALUType;
+(function (H265NALUType) {
+  /** Coded slice segment of a non-TSA, non-STSA trailing picture */
+  H265NALUType[H265NALUType["TRAIL_N"] = 0] = "TRAIL_N";
+  /** Coded slice segment of a non-TSA, non-STSA trailing picture */
+  H265NALUType[H265NALUType["TRAIL_R"] = 1] = "TRAIL_R";
+  /** Coded slice segment of a TSA picture */
+  H265NALUType[H265NALUType["TSA_N"] = 2] = "TSA_N";
+  /** Coded slice segment of a TSA picture */
+  H265NALUType[H265NALUType["TSA_R"] = 3] = "TSA_R";
+  /** Coded slice segment of an STSA picture */
+  H265NALUType[H265NALUType["STSA_N"] = 4] = "STSA_N";
+  /** Coded slice segment of an STSA picture */
+  H265NALUType[H265NALUType["STSA_R"] = 5] = "STSA_R";
+  /** Coded slice segment of a RADL picture */
+  H265NALUType[H265NALUType["RADL_N"] = 6] = "RADL_N";
+  /** Coded slice segment of a RADL picture */
+  H265NALUType[H265NALUType["RADL_R"] = 7] = "RADL_R";
+  /** Coded slice segment of a RASL picture */
+  H265NALUType[H265NALUType["RASL_N"] = 8] = "RASL_N";
+  /** Coded slice segment of a RASL picture */
+  H265NALUType[H265NALUType["RASL_R"] = 9] = "RASL_R";
+  // 10-15 reserved
+  /** Coded slice segment of a BLA picture */
+  H265NALUType[H265NALUType["BLA_W_LP"] = 16] = "BLA_W_LP";
+  /** Coded slice segment of a BLA picture */
+  H265NALUType[H265NALUType["BLA_W_RADL"] = 17] = "BLA_W_RADL";
+  /** Coded slice segment of a BLA picture */
+  H265NALUType[H265NALUType["BLA_N_LP"] = 18] = "BLA_N_LP";
+  /** Coded slice segment of an IDR picture */
+  H265NALUType[H265NALUType["IDR_W_RADL"] = 19] = "IDR_W_RADL";
+  /** Coded slice segment of an IDR picture */
+  H265NALUType[H265NALUType["IDR_N_LP"] = 20] = "IDR_N_LP";
+  /** Coded slice segment of a CRA picture */
+  H265NALUType[H265NALUType["CRA_NUT"] = 21] = "CRA_NUT";
+  // 22-31 reserved
+  /** Video parameter set */
+  H265NALUType[H265NALUType["VPS_NUT"] = 32] = "VPS_NUT";
+  /** Sequence parameter set */
+  H265NALUType[H265NALUType["SPS_NUT"] = 33] = "SPS_NUT";
+  /** Picture parameter set */
+  H265NALUType[H265NALUType["PPS_NUT"] = 34] = "PPS_NUT";
+  /** Access unit delimiter */
+  H265NALUType[H265NALUType["AUD_NUT"] = 35] = "AUD_NUT";
+  /** End of sequence */
+  H265NALUType[H265NALUType["EOS_NUT"] = 36] = "EOS_NUT";
+  /** End of bitstream */
+  H265NALUType[H265NALUType["EOB_NUT"] = 37] = "EOB_NUT";
+  /** Filler data */
+  H265NALUType[H265NALUType["FD_NUT"] = 38] = "FD_NUT";
+  /** Supplemental enhancement information */
+  H265NALUType[H265NALUType["PREFIX_SEI_NUT"] = 39] = "PREFIX_SEI_NUT";
+  /** Supplemental enhancement information */
+  H265NALUType[H265NALUType["SUFFIX_SEI_NUT"] = 40] = "SUFFIX_SEI_NUT";
+  // 41-47 reserved
+  // 48-63 unspecified
+})(H265NALUType || (H265NALUType = {}));
+/**
+ * Parse H.264 NALU type from the first byte of a NALU
+ * @param startByte First byte of the NALU
+ * @returns H.264 NALU type
+ */
+function parseH264NALUType(startByte) {
+  return startByte & kH264NaluTypeMask;
 }
-function importKey(keyBytes_1) {
-  return __awaiter(this, arguments, void 0, function (keyBytes) {
-    let algorithm = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {
-      name: ENCRYPTION_ALGORITHM
-    };
-    let usage = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 'encrypt';
-    return function* () {
-      // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/importKey
-      return crypto.subtle.importKey('raw', keyBytes, algorithm, false, usage === 'derive' ? ['deriveBits', 'deriveKey'] : ['encrypt', 'decrypt']);
-    }();
-  });
+/**
+ * Parse H.265 NALU type from the first byte of a NALU
+ * @param firstByte First byte of the NALU
+ * @returns H.265 NALU type
+ */
+function parseH265NALUType(firstByte) {
+  // In H.265, NALU type is in bits 1-6 (shifted right by 1)
+  return firstByte >> 1 & 0x3f;
 }
-function getAlgoOptions(algorithmName, salt) {
-  const textEncoder = new TextEncoder();
-  const encodedSalt = textEncoder.encode(salt);
-  switch (algorithmName) {
-    case 'HKDF':
-      return {
-        name: 'HKDF',
-        salt: encodedSalt,
-        hash: 'SHA-256',
-        info: new ArrayBuffer(128)
-      };
-    case 'PBKDF2':
-      {
-        return {
-          name: 'PBKDF2',
-          salt: encodedSalt,
-          hash: 'SHA-256',
-          iterations: 100000
-        };
+/**
+ * Check if H.264 NALU type is a slice (IDR or non-IDR)
+ * @param naluType H.264 NALU type
+ * @returns True if the NALU is a slice
+ */
+function isH264SliceNALU(naluType) {
+  return naluType === H264NALUType.SLICE_IDR || naluType === H264NALUType.SLICE_NON_IDR;
+}
+/**
+ * Check if H.265 NALU type is a slice
+ * @param naluType H.265 NALU type
+ * @returns True if the NALU is a slice
+ */
+function isH265SliceNALU(naluType) {
+  return (
+    // VCL NALUs (Video Coding Layer) - slice segments
+    naluType === H265NALUType.TRAIL_N || naluType === H265NALUType.TRAIL_R || naluType === H265NALUType.TSA_N || naluType === H265NALUType.TSA_R || naluType === H265NALUType.STSA_N || naluType === H265NALUType.STSA_R || naluType === H265NALUType.RADL_N || naluType === H265NALUType.RADL_R || naluType === H265NALUType.RASL_N || naluType === H265NALUType.RASL_R || naluType === H265NALUType.BLA_W_LP || naluType === H265NALUType.BLA_W_RADL || naluType === H265NALUType.BLA_N_LP || naluType === H265NALUType.IDR_W_RADL || naluType === H265NALUType.IDR_N_LP || naluType === H265NALUType.CRA_NUT
+  );
+}
+/**
+ * Detect codec type by examining NALU types in the data
+ * @param data Frame data
+ * @param naluIndices Indices where NALUs start
+ * @returns Detected codec type
+ */
+function detectCodecFromNALUs(data, naluIndices) {
+  for (const naluIndex of naluIndices) {
+    if (isH264SliceNALU(parseH264NALUType(data[naluIndex]))) return 'h264';
+    if (isH265SliceNALU(parseH265NALUType(data[naluIndex]))) return 'h265';
+  }
+  return 'unknown';
+}
+/**
+ * Find the first slice NALU and return the number of unencrypted bytes
+ * @param data Frame data
+ * @param naluIndices Indices where NALUs start
+ * @param codec Codec type to use for parsing
+ * @returns Number of unencrypted bytes (index + 2) or null if no slice found
+ */
+function findSliceNALUUnencryptedBytes(data, naluIndices, codec) {
+  for (const index of naluIndices) {
+    if (codec === 'h265') {
+      const type = parseH265NALUType(data[index]);
+      if (isH265SliceNALU(type)) {
+        return index + 2;
       }
-    default:
-      throw new Error("algorithm ".concat(algorithmName, " is currently unsupported"));
+    } else {
+      const type = parseH264NALUType(data[index]);
+      if (isH264SliceNALU(type)) {
+        return index + 2;
+      }
+    }
   }
+  return null;
 }
 /**
- * Derives a set of keys from the master key.
- * See https://tools.ietf.org/html/draft-omara-sframe-00#section-4.3.1
+ * Find all NALU start indices in a byte stream
+ * Supports both H.264 and H.265 with 3-byte and 4-byte start codes
+ *
+ * This function slices the NALUs present in the supplied buffer, assuming it is already byte-aligned.
+ * Code adapted from https://github.com/medooze/h264-frame-parser/blob/main/lib/NalUnits.ts to return indices only
+ *
+ * @param stream Byte stream containing NALUs
+ * @returns Array of indices where NALUs start (after the start code)
  */
-function deriveKeys(material, salt) {
-  return __awaiter(this, void 0, void 0, function* () {
-    const algorithmOptions = getAlgoOptions(material.algorithm.name, salt);
-    // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey#HKDF
-    // https://developer.mozilla.org/en-US/docs/Web/API/HkdfParams
-    const encryptionKey = yield crypto.subtle.deriveKey(algorithmOptions, material, {
-      name: ENCRYPTION_ALGORITHM,
-      length: 128
-    }, false, ['encrypt', 'decrypt']);
+function findNALUIndices(stream) {
+  const result = [];
+  let start = 0,
+    pos = 0,
+    searchLength = stream.length - 3; // Changed to -3 to handle 4-byte start codes
+  while (pos < searchLength) {
+    // skip until end of current NALU - check for both 3-byte and 4-byte start codes
+    while (pos < searchLength) {
+      // Check for 4-byte start code: 0x00 0x00 0x00 0x01
+      if (pos < searchLength - 1 && stream[pos] === 0 && stream[pos + 1] === 0 && stream[pos + 2] === 0 && stream[pos + 3] === 1) {
+        break;
+      }
+      // Check for 3-byte start code: 0x00 0x00 0x01
+      if (stream[pos] === 0 && stream[pos + 1] === 0 && stream[pos + 2] === 1) {
+        break;
+      }
+      pos++;
+    }
+    if (pos >= searchLength) pos = stream.length;
+    // remove trailing zeros from current NALU
+    let end = pos;
+    while (end > start && stream[end - 1] === 0) end--;
+    // save current NALU
+    if (start === 0) {
+      if (end !== start) throw TypeError('byte stream contains leading data');
+    } else {
+      result.push(start);
+    }
+    // begin new NALU - determine start code length
+    let startCodeLength = 3;
+    if (pos < stream.length - 3 && stream[pos] === 0 && stream[pos + 1] === 0 && stream[pos + 2] === 0 && stream[pos + 3] === 1) {
+      startCodeLength = 4;
+    }
+    start = pos = pos + startCodeLength;
+  }
+  return result;
+}
+/**
+ * Process NALU data for frame encryption, detecting codec and finding unencrypted bytes
+ * @param data Frame data
+ * @param knownCodec Known codec from other sources (optional)
+ * @returns NALU processing result
+ */
+function processNALUsForEncryption(data, knownCodec) {
+  const naluIndices = findNALUIndices(data);
+  const detectedCodec = knownCodec !== null && knownCodec !== void 0 ? knownCodec : detectCodecFromNALUs(data, naluIndices);
+  if (detectedCodec === 'unknown') {
     return {
-      material,
-      encryptionKey
+      unencryptedBytes: 0,
+      detectedCodec,
+      requiresNALUProcessing: false
     };
-  });
-}
-/**
- * Ratchets a key. See
- * https://tools.ietf.org/html/draft-omara-sframe-00#section-4.3.5.1
- */
-function ratchet(material, salt) {
-  return __awaiter(this, void 0, void 0, function* () {
-    const algorithmOptions = getAlgoOptions(material.algorithm.name, salt);
-    // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveBits
-    return crypto.subtle.deriveBits(algorithmOptions, material, 256);
-  });
-}
-function needsRbspUnescaping(frameData) {
-  for (var i = 0; i < frameData.length - 3; i++) {
-    if (frameData[i] == 0 && frameData[i + 1] == 0 && frameData[i + 2] == 3) return true;
   }
-  return false;
-}
-function parseRbsp(stream) {
-  const dataOut = [];
-  var length = stream.length;
-  for (var i = 0; i < stream.length;) {
-    // Be careful about over/underflow here. byte_length_ - 3 can underflow, and
-    // i + 3 can overflow, but byte_length_ - i can't, because i < byte_length_
-    // above, and that expression will produce the number of bytes left in
-    // the stream including the byte at i.
-    if (length - i >= 3 && !stream[i] && !stream[i + 1] && stream[i + 2] == 3) {
-      // Two rbsp bytes.
-      dataOut.push(stream[i++]);
-      dataOut.push(stream[i++]);
-      // Skip the emulation byte.
-      i++;
-    } else {
-      // Single rbsp byte.
-      dataOut.push(stream[i++]);
-    }
+  const unencryptedBytes = findSliceNALUUnencryptedBytes(data, naluIndices, detectedCodec);
+  if (unencryptedBytes === null) {
+    throw new TypeError('Could not find NALU');
   }
-  return new Uint8Array(dataOut);
-}
-const kZerosInStartSequence = 2;
-const kEmulationByte = 3;
-function writeRbsp(data_in) {
-  const dataOut = [];
-  var numConsecutiveZeros = 0;
-  for (var i = 0; i < data_in.length; ++i) {
-    var byte = data_in[i];
-    if (byte <= kEmulationByte && numConsecutiveZeros >= kZerosInStartSequence) {
-      // Need to escape.
-      dataOut.push(kEmulationByte);
-      numConsecutiveZeros = 0;
-    }
-    dataOut.push(byte);
-    if (byte == 0) {
-      ++numConsecutiveZeros;
-    } else {
-      numConsecutiveZeros = 0;
-    }
-  }
-  return new Uint8Array(dataOut);
+  return {
+    unencryptedBytes,
+    detectedCodec,
+    requiresNALUProcessing: true
+  };
 }
 
-class SifGuard {
-  constructor() {
-    this.consecutiveSifCount = 0;
-    this.lastSifReceivedAt = 0;
-    this.userFramesSinceSif = 0;
-  }
-  recordSif() {
-    var _a;
-    this.consecutiveSifCount += 1;
-    (_a = this.sifSequenceStartedAt) !== null && _a !== void 0 ? _a : this.sifSequenceStartedAt = Date.now();
-    this.lastSifReceivedAt = Date.now();
-  }
-  recordUserFrame() {
-    if (this.sifSequenceStartedAt === undefined) {
-      return;
-    } else {
-      this.userFramesSinceSif += 1;
+/**
+ * Create a crypto hash using Web Crypto API for secure comparison operations
+ */
+function cryptoHash(data) {
+  return __awaiter(this, void 0, void 0, function* () {
+    const hashBuffer = yield crypto.subtle.digest('SHA-256', data);
+    const hashArray = new Uint8Array(hashBuffer);
+    return Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+  });
+}
+/**
+ * Pre-computed SHA-256 hashes for secure comparison operations
+ */
+const CryptoHashes = {
+  VP8KeyFrame8x8: 'ef0161653d8b2b23aad46624b420af1d03ce48950e9fc85718028f91b50f9219',
+  H264KeyFrame2x2SPS: 'f0a0e09647d891d6d50aa898bce7108090375d0d55e50a2bb21147afee558e44',
+  H264KeyFrame2x2PPS: '61d9665eed71b6d424ae9539330a3bdd5cb386d4d781c808219a6e36750493a7',
+  H264KeyFrame2x2IDR: 'faffc26b68a2fc09096fa20f3351e706398b6f838a7500c8063472c2e476e90d',
+  OpusSilenceFrame: 'aad8d31fc56b2802ca500e58c2fb9d0b29ad71bb7cb52cd6530251eade188988'
+};
+/**
+ * Check if a byte array matches any of the known SIF payload frame types using secure crypto hashes
+ */
+function identifySifPayload(data) {
+  return __awaiter(this, void 0, void 0, function* () {
+    const hash = yield cryptoHash(data);
+    switch (hash) {
+      case CryptoHashes.VP8KeyFrame8x8:
+        return 'vp8';
+      case CryptoHashes.H264KeyFrame2x2SPS:
+        return 'h264';
+      case CryptoHashes.H264KeyFrame2x2PPS:
+        return 'h264';
+      case CryptoHashes.H264KeyFrame2x2IDR:
+        return 'h264';
+      case CryptoHashes.OpusSilenceFrame:
+        return 'opus';
+      default:
+        return null;
     }
-    if (
-    // reset if we received more user frames than SIFs
-    this.userFramesSinceSif > this.consecutiveSifCount ||
-    // also reset if we got a new user frame and the latest SIF frame hasn't been updated in a while
-    Date.now() - this.lastSifReceivedAt > MAX_SIF_DURATION) {
-      this.reset();
-    }
-  }
-  isSifAllowed() {
-    return this.consecutiveSifCount < MAX_SIF_COUNT && (this.sifSequenceStartedAt === undefined || Date.now() - this.sifSequenceStartedAt < MAX_SIF_DURATION);
-  }
-  reset() {
-    this.userFramesSinceSif = 0;
-    this.consecutiveSifCount = 0;
-    this.sifSequenceStartedAt = undefined;
-  }
+  });
 }
 
 const encryptionEnabledMap = new Map();
@@ -1130,13 +1508,13 @@ class FrameCryptor extends BaseFrameCryptor {
   constructor(opts) {
     var _a;
     super();
+    this.isTransformActive = false;
     this.sendCounts = new Map();
     this.keys = opts.keys;
     this.participantIdentity = opts.participantIdentity;
     this.rtpMap = new Map();
     this.keyProviderOptions = opts.keyProviderOptions;
     this.sifTrailer = (_a = opts.sifTrailer) !== null && _a !== void 0 ? _a : Uint8Array.from([]);
-    this.sifGuard = new SifGuard();
   }
   get logContext() {
     return {
@@ -1160,7 +1538,6 @@ class FrameCryptor extends BaseFrameCryptor {
     }
     this.participantIdentity = id;
     this.keys = keys;
-    this.sifGuard.reset();
   }
   unsetParticipant() {
     workerLogger.debug('unsetting participant', this.logContext);
@@ -1193,7 +1570,7 @@ class FrameCryptor extends BaseFrameCryptor {
   setRtpMap(map) {
     this.rtpMap = map;
   }
-  setupTransform(operation, readable, writable, trackId, codec) {
+  setupTransform(operation, readable, writable, trackId, isReuse, codec) {
     if (codec) {
       workerLogger.info('setting codec on cryptor to', {
         codec
@@ -1205,13 +1582,20 @@ class FrameCryptor extends BaseFrameCryptor {
       passedTrackId: trackId,
       codec
     }, this.logContext));
+    if (isReuse && this.isTransformActive) {
+      workerLogger.debug('reuse transform', Object.assign({}, this.logContext));
+      return;
+    }
     const transformFn = operation === 'encode' ? this.encodeFunction : this.decodeFunction;
     const transformStream = new TransformStream({
       transform: transformFn.bind(this)
     });
+    this.isTransformActive = true;
     readable.pipeThrough(transformStream).pipeTo(writable).catch(e => {
       workerLogger.warn(e);
       this.emit(CryptorEvent.Error, e instanceof CryptorError ? e : new CryptorError(e.message, undefined, this.participantIdentity));
+    }).finally(() => {
+      this.isTransformActive = false;
     });
     this.trackId = trackId;
   }
@@ -1286,7 +1670,7 @@ class FrameCryptor extends BaseFrameCryptor {
           newDataWithoutHeader.set(new Uint8Array(cipherText)); // add ciphertext.
           newDataWithoutHeader.set(new Uint8Array(iv), cipherText.byteLength); // append IV.
           newDataWithoutHeader.set(frameTrailer, cipherText.byteLength + iv.byteLength); // append frame trailer.
-          if (frameInfo.isH264) {
+          if (frameInfo.requiresNALUProcessing) {
             newDataWithoutHeader = writeRbsp(newDataWithoutHeader);
           }
           var newData = new Uint8Array(frameHeader.byteLength + newDataWithoutHeader.byteLength);
@@ -1315,22 +1699,17 @@ class FrameCryptor extends BaseFrameCryptor {
       if (!this.isEnabled() ||
       // skip for decryption for empty dtx frames
       encodedFrame.data.byteLength === 0) {
-        workerLogger.debug('skipping empty frame', this.logContext);
-        this.sifGuard.recordUserFrame();
         return controller.enqueue(encodedFrame);
       }
       if (isFrameServerInjected(encodedFrame.data, this.sifTrailer)) {
-        workerLogger.debug('enqueue SIF', this.logContext);
-        this.sifGuard.recordSif();
-        if (this.sifGuard.isSifAllowed()) {
-          encodedFrame.data = encodedFrame.data.slice(0, encodedFrame.data.byteLength - this.sifTrailer.byteLength);
+        encodedFrame.data = encodedFrame.data.slice(0, encodedFrame.data.byteLength - this.sifTrailer.byteLength);
+        if (yield identifySifPayload(encodedFrame.data)) {
+          workerLogger.debug('enqueue SIF', this.logContext);
           return controller.enqueue(encodedFrame);
         } else {
-          workerLogger.warn('SIF limit reached, dropping frame');
+          workerLogger.warn('Unexpected SIF frame payload, dropping frame', this.logContext);
           return;
         }
-      } else {
-        this.sifGuard.recordUserFrame();
       }
       const data = new Uint8Array(encodedFrame.data);
       const keyIndex = data[encodedFrame.data.byteLength - 1];
@@ -1394,7 +1773,7 @@ class FrameCryptor extends BaseFrameCryptor {
         try {
           const frameHeader = new Uint8Array(encodedFrame.data, 0, frameInfo.unencryptedBytes);
           var encryptedData = new Uint8Array(encodedFrame.data, frameHeader.length, encodedFrame.data.byteLength - frameHeader.length);
-          if (frameInfo.isH264 && needsRbspUnescaping(encryptedData)) {
+          if (frameInfo.requiresNALUProcessing && needsRbspUnescaping(encryptedData)) {
             encryptedData = parseRbsp(encryptedData);
             const newUint8 = new Uint8Array(frameHeader.byteLength + encryptedData.byteLength);
             newUint8.set(frameHeader);
@@ -1496,56 +1875,59 @@ class FrameCryptor extends BaseFrameCryptor {
   }
   getUnencryptedBytes(frame) {
     var _a;
-    var frameInfo = {
-      unencryptedBytes: 0,
-      isH264: false
-    };
-    if (isVideoFrame(frame)) {
-      let detectedCodec = (_a = this.getVideoCodec(frame)) !== null && _a !== void 0 ? _a : this.videoCodec;
-      if (detectedCodec !== this.detectedCodec) {
-        workerLogger.debug('detected different codec', Object.assign({
-          detectedCodec,
-          oldCodec: this.detectedCodec
-        }, this.logContext));
-        this.detectedCodec = detectedCodec;
-      }
-      if (detectedCodec === 'av1') {
-        throw new Error("".concat(detectedCodec, " is not yet supported for end to end encryption"));
-      }
-      if (detectedCodec === 'vp8') {
-        frameInfo.unencryptedBytes = UNENCRYPTED_BYTES[frame.type];
-      } else if (detectedCodec === 'vp9') {
-        frameInfo.unencryptedBytes = 0;
-        return frameInfo;
-      }
-      const data = new Uint8Array(frame.data);
-      try {
-        const naluIndices = findNALUIndices(data);
-        // if the detected codec is undefined we test whether it _looks_ like a h264 frame as a best guess
-        frameInfo.isH264 = detectedCodec === 'h264' || naluIndices.some(naluIndex => [NALUType.SLICE_IDR, NALUType.SLICE_NON_IDR].includes(parseNALUType(data[naluIndex])));
-        if (frameInfo.isH264) {
-          for (const index of naluIndices) {
-            let type = parseNALUType(data[index]);
-            switch (type) {
-              case NALUType.SLICE_IDR:
-              case NALUType.SLICE_NON_IDR:
-                frameInfo.unencryptedBytes = index + 2;
-                return frameInfo;
-              default:
-                break;
-            }
-          }
-          throw new TypeError('Could not find NALU');
-        }
-      } catch (e) {
-        // no op, we just continue and fallback to vp8
-      }
-      frameInfo.unencryptedBytes = UNENCRYPTED_BYTES[frame.type];
-      return frameInfo;
-    } else {
-      frameInfo.unencryptedBytes = UNENCRYPTED_BYTES.audio;
-      return frameInfo;
+    // Handle audio frames
+    if (!isVideoFrame(frame)) {
+      return {
+        unencryptedBytes: UNENCRYPTED_BYTES.audio,
+        requiresNALUProcessing: false
+      };
     }
+    // Detect and track codec changes
+    const detectedCodec = (_a = this.getVideoCodec(frame)) !== null && _a !== void 0 ? _a : this.videoCodec;
+    if (detectedCodec !== this.detectedCodec) {
+      workerLogger.debug('detected different codec', Object.assign({
+        detectedCodec,
+        oldCodec: this.detectedCodec
+      }, this.logContext));
+      this.detectedCodec = detectedCodec;
+    }
+    // Check for unsupported codecs
+    if (detectedCodec === 'av1') {
+      throw new Error("".concat(detectedCodec, " is not yet supported for end to end encryption"));
+    }
+    // Handle VP8/VP9 codecs (no NALU processing needed)
+    if (detectedCodec === 'vp8') {
+      return {
+        unencryptedBytes: UNENCRYPTED_BYTES[frame.type],
+        requiresNALUProcessing: false
+      };
+    }
+    if (detectedCodec === 'vp9') {
+      return {
+        unencryptedBytes: 0,
+        requiresNALUProcessing: false
+      };
+    }
+    // Try NALU processing for H.264/H.265 codecs
+    try {
+      const knownCodec = detectedCodec === 'h264' || detectedCodec === 'h265' ? detectedCodec : undefined;
+      const naluResult = processNALUsForEncryption(new Uint8Array(frame.data), knownCodec);
+      if (naluResult.requiresNALUProcessing) {
+        return {
+          unencryptedBytes: naluResult.unencryptedBytes,
+          requiresNALUProcessing: true
+        };
+      }
+    } catch (e) {
+      workerLogger.debug('NALU processing failed, falling back to VP8 handling', Object.assign({
+        error: e
+      }, this.logContext));
+    }
+    // Fallback to VP8 handling
+    return {
+      unencryptedBytes: UNENCRYPTED_BYTES[frame.type],
+      requiresNALUProcessing: false
+    };
   }
   /**
    * inspects frame payloadtype if available and maps it to the codec specified in rtpMap
@@ -1559,80 +1941,6 @@ class FrameCryptor extends BaseFrameCryptor {
     return codec;
   }
 }
-/**
- * Slice the NALUs present in the supplied buffer, assuming it is already byte-aligned
- * code adapted from https://github.com/medooze/h264-frame-parser/blob/main/lib/NalUnits.ts to return indices only
- */
-function findNALUIndices(stream) {
-  const result = [];
-  let start = 0,
-    pos = 0,
-    searchLength = stream.length - 2;
-  while (pos < searchLength) {
-    // skip until end of current NALU
-    while (pos < searchLength && !(stream[pos] === 0 && stream[pos + 1] === 0 && stream[pos + 2] === 1)) pos++;
-    if (pos >= searchLength) pos = stream.length;
-    // remove trailing zeros from current NALU
-    let end = pos;
-    while (end > start && stream[end - 1] === 0) end--;
-    // save current NALU
-    if (start === 0) {
-      if (end !== start) throw TypeError('byte stream contains leading data');
-    } else {
-      result.push(start);
-    }
-    // begin new NALU
-    start = pos = pos + 3;
-  }
-  return result;
-}
-function parseNALUType(startByte) {
-  return startByte & kNaluTypeMask;
-}
-const kNaluTypeMask = 0x1f;
-var NALUType;
-(function (NALUType) {
-  /** Coded slice of a non-IDR picture */
-  NALUType[NALUType["SLICE_NON_IDR"] = 1] = "SLICE_NON_IDR";
-  /** Coded slice data partition A */
-  NALUType[NALUType["SLICE_PARTITION_A"] = 2] = "SLICE_PARTITION_A";
-  /** Coded slice data partition B */
-  NALUType[NALUType["SLICE_PARTITION_B"] = 3] = "SLICE_PARTITION_B";
-  /** Coded slice data partition C */
-  NALUType[NALUType["SLICE_PARTITION_C"] = 4] = "SLICE_PARTITION_C";
-  /** Coded slice of an IDR picture */
-  NALUType[NALUType["SLICE_IDR"] = 5] = "SLICE_IDR";
-  /** Supplemental enhancement information */
-  NALUType[NALUType["SEI"] = 6] = "SEI";
-  /** Sequence parameter set */
-  NALUType[NALUType["SPS"] = 7] = "SPS";
-  /** Picture parameter set */
-  NALUType[NALUType["PPS"] = 8] = "PPS";
-  /** Access unit delimiter */
-  NALUType[NALUType["AUD"] = 9] = "AUD";
-  /** End of sequence */
-  NALUType[NALUType["END_SEQ"] = 10] = "END_SEQ";
-  /** End of stream */
-  NALUType[NALUType["END_STREAM"] = 11] = "END_STREAM";
-  /** Filler data */
-  NALUType[NALUType["FILLER_DATA"] = 12] = "FILLER_DATA";
-  /** Sequence parameter set extension */
-  NALUType[NALUType["SPS_EXT"] = 13] = "SPS_EXT";
-  /** Prefix NAL unit */
-  NALUType[NALUType["PREFIX_NALU"] = 14] = "PREFIX_NALU";
-  /** Subset sequence parameter set */
-  NALUType[NALUType["SUBSET_SPS"] = 15] = "SUBSET_SPS";
-  /** Depth parameter set */
-  NALUType[NALUType["DPS"] = 16] = "DPS";
-  // 17, 18 reserved
-  /** Coded slice of an auxiliary coded picture without partitioning */
-  NALUType[NALUType["SLICE_AUX"] = 19] = "SLICE_AUX";
-  /** Coded slice extension */
-  NALUType[NALUType["SLICE_EXT"] = 20] = "SLICE_EXT";
-  /** Coded slice extension for a depth view component or a 3D-AVC texture view component */
-  NALUType[NALUType["SLICE_LAYER_EXT"] = 21] = "SLICE_LAYER_EXT";
-  // 22, 23 reserved
-})(NALUType || (NALUType = {}));
 /**
  * we use a magic frame trailer to detect whether a frame is injected
  * by the livekit server and thus to be treated as unencrypted
@@ -1865,11 +2173,49 @@ onmessage = ev => {
         break;
       case 'decode':
         let cryptor = getTrackCryptor(data.participantIdentity, data.trackId);
-        cryptor.setupTransform(kind, data.readableStream, data.writableStream, data.trackId, data.codec);
+        cryptor.setupTransform(kind, data.readableStream, data.writableStream, data.trackId, data.isReuse, data.codec);
         break;
       case 'encode':
         let pubCryptor = getTrackCryptor(data.participantIdentity, data.trackId);
-        pubCryptor.setupTransform(kind, data.readableStream, data.writableStream, data.trackId, data.codec);
+        pubCryptor.setupTransform(kind, data.readableStream, data.writableStream, data.trackId, data.isReuse, data.codec);
+        break;
+      case 'encryptDataRequest':
+        const {
+          payload: encryptedPayload,
+          iv,
+          keyIndex
+        } = yield DataCryptor.encrypt(data.payload, getParticipantKeyHandler(data.participantIdentity));
+        console.log('encrypted payload', {
+          original: data.payload,
+          encrypted: encryptedPayload,
+          iv
+        });
+        postMessage({
+          kind: 'encryptDataResponse',
+          data: {
+            payload: encryptedPayload,
+            iv,
+            keyIndex,
+            uuid: data.uuid
+          }
+        });
+        break;
+      case 'decryptDataRequest':
+        const {
+          payload: decryptedPayload
+        } = yield DataCryptor.decrypt(data.payload, data.iv, getParticipantKeyHandler(data.participantIdentity), data.keyIndex);
+        console.log('decrypted payload', {
+          original: data.payload,
+          decrypted: decryptedPayload,
+          iv: data.iv
+        });
+        postMessage({
+          kind: 'decryptDataResponse',
+          data: {
+            payload: decryptedPayload,
+            uuid: data.uuid
+          }
+        });
         break;
       case 'setKey':
         if (useSharedKey) {
@@ -1886,6 +2232,11 @@ onmessage = ev => {
         break;
       case 'updateCodec':
         getTrackCryptor(data.participantIdentity, data.trackId).setVideoCodec(data.codec);
+        workerLogger.info('updated codec', {
+          participantIdentity: data.participantIdentity,
+          trackId: data.trackId,
+          codec: data.codec
+        });
         break;
       case 'setRTPMap':
         // this is only used for the local participant
@@ -1935,7 +2286,8 @@ function getTrackCryptor(participantIdentity, trackId) {
   let cryptor = cryptors[0];
   if (!cryptor) {
     workerLogger.info('creating new cryptor for', {
-      participantIdentity
+      participantIdentity,
+      trackId
     });
     if (!keyProviderOptions) {
       throw Error('Missing keyProvider options');
@@ -2040,11 +2392,9 @@ if (self.RTCTransformEvent) {
   workerLogger.debug('setup transform event');
   // @ts-ignore
   self.onrtctransform = event => {
-    // @ts-ignore .transformer property is part of RTCTransformEvent
+    // @ts-ignore
     const transformer = event.transformer;
     workerLogger.debug('transformer', transformer);
-    // @ts-ignore monkey patching non standard flag
-    transformer.handled = true;
     const {
       kind,
       participantIdentity,
@@ -2055,7 +2405,7 @@ if (self.RTCTransformEvent) {
     workerLogger.debug('transform', {
       codec
     });
-    cryptor.setupTransform(kind, transformer.readable, transformer.writable, trackId, codec);
+    cryptor.setupTransform(kind, transformer.readable, transformer.writable, trackId, false, codec);
   };
 }
 //# sourceMappingURL=livekit-client.e2ee.worker.mjs.map

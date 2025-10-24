@@ -43,6 +43,7 @@ export interface EncodeMessage extends BaseMessage {
         writableStream: WritableStream;
         trackId: string;
         codec?: VideoCodec;
+        isReuse: boolean;
     };
 }
 export interface RemoveTransformMessage extends BaseMessage {
@@ -94,7 +95,41 @@ export interface InitAck extends BaseMessage {
         enabled: boolean;
     };
 }
-export type E2EEWorkerMessage = InitMessage | SetKeyMessage | EncodeMessage | ErrorMessage | EnableMessage | RemoveTransformMessage | RTPVideoMapMessage | UpdateCodecMessage | RatchetRequestMessage | RatchetMessage | SifTrailerMessage | InitAck;
+export interface DecryptDataRequestMessage extends BaseMessage {
+    kind: 'decryptDataRequest';
+    data: {
+        uuid: string;
+        payload: Uint8Array;
+        iv: Uint8Array;
+        participantIdentity: string;
+        keyIndex: number;
+    };
+}
+export interface DecryptDataResponseMessage extends BaseMessage {
+    kind: 'decryptDataResponse';
+    data: {
+        uuid: string;
+        payload: Uint8Array;
+    };
+}
+export interface EncryptDataRequestMessage extends BaseMessage {
+    kind: 'encryptDataRequest';
+    data: {
+        uuid: string;
+        payload: Uint8Array;
+        participantIdentity: string;
+    };
+}
+export interface EncryptDataResponseMessage extends BaseMessage {
+    kind: 'encryptDataResponse';
+    data: {
+        uuid: string;
+        payload: Uint8Array;
+        iv: Uint8Array;
+        keyIndex: number;
+    };
+}
+export type E2EEWorkerMessage = InitMessage | SetKeyMessage | EncodeMessage | ErrorMessage | EnableMessage | RemoveTransformMessage | RTPVideoMapMessage | UpdateCodecMessage | RatchetRequestMessage | RatchetMessage | SifTrailerMessage | InitAck | DecryptDataRequestMessage | DecryptDataResponseMessage | EncryptDataRequestMessage | EncryptDataResponseMessage;
 export type KeySet = {
     material: CryptoKey;
     encryptionKey: CryptoKey;
@@ -128,5 +163,11 @@ export type DecodeRatchetOptions = {
     ratchetCount: number;
     /** ratcheted key to try */
     encryptionKey?: CryptoKey;
+};
+export type ScriptTransformOptions = {
+    kind: 'decode' | 'encode';
+    participantIdentity: string;
+    trackId: string;
+    codec?: VideoCodec;
 };
 //# sourceMappingURL=types.d.ts.map

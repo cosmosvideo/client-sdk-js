@@ -1,7 +1,8 @@
-import { type AddTrackRequest, type ConnectionQualityUpdate, DataPacket, DataPacket_Kind, DisconnectReason, type JoinResponse, ParticipantInfo, RequestResponse, Room as RoomModel, RoomMovedResponse, SpeakerInfo, type StreamStateUpdate, SubscribedQualityUpdate, type SubscriptionPermissionUpdate, type SubscriptionResponse, TrackInfo, TrackUnpublishedResponse, Transcription } from '@livekit/protocol';
+import { type AddTrackRequest, type ConnectionQualityUpdate, DataPacket, DataPacket_Kind, DisconnectReason, Encryption_Type, type JoinResponse, ParticipantInfo, RequestResponse, Room as RoomModel, RoomMovedResponse, SpeakerInfo, type StreamStateUpdate, SubscribedQualityUpdate, type SubscriptionPermissionUpdate, type SubscriptionResponse, TrackInfo, TrackUnpublishedResponse, Transcription } from '@livekit/protocol';
 import type TypedEventEmitter from 'typed-emitter';
 import type { SignalOptions } from '../api/SignalClient';
 import { SignalClient } from '../api/SignalClient';
+import type { BaseE2EEManager } from '../e2ee/E2eeManager';
 import type { InternalRoomOptions } from '../options';
 import PCTransport from './PCTransport';
 import { PCTransportManager } from './PCTransportManager';
@@ -27,6 +28,12 @@ export default class RTCEngine extends RTCEngine_base {
      * @internal
      */
     latestJoinResponse?: JoinResponse;
+    /**
+     * @internal
+     */
+    latestRemoteOfferId: number;
+    /** @internal */
+    e2eeManager: BaseE2EEManager | undefined;
     get isClosed(): boolean;
     get pendingReconnect(): boolean;
     private lossyDC?;
@@ -59,6 +66,10 @@ export default class RTCEngine extends RTCEngine_base {
     private log;
     private loggerOptions;
     private publisherConnectionPromise;
+    private reliableDataSequence;
+    private reliableMessageBuffer;
+    private reliableReceivedState;
+    private midToTrackId;
     constructor(options: InternalRoomOptions);
     /** @internal */
     get logContext(): {
@@ -109,6 +120,7 @@ export default class RTCEngine extends RTCEngine_base {
     /** @internal */
     publishRpcAck(destinationIdentity: string, requestId: string): Promise<void>;
     sendDataPacket(packet: DataPacket, kind: DataPacket_Kind): Promise<void>;
+    private resendReliableMessagesForResume;
     private updateAndEmitDCBufferStatus;
     private isBufferStatusLow;
     waitForBufferStatusLow(kind: DataPacket_Kind): Promise<void>;
@@ -130,6 +142,7 @@ export default class RTCEngine extends RTCEngine_base {
     private handleBrowserOnLine;
     private registerOnLineListener;
     private deregisterOnLineListener;
+    getTrackIdForReceiver(receiver: RTCRtpReceiver): string | undefined;
 }
 export type EngineEventCallbacks = {
     connected: (joinResp: JoinResponse) => void;
@@ -143,9 +156,9 @@ export type EngineEventCallbacks = {
     closing: () => void;
     mediaTrackAdded: (track: MediaStreamTrack, streams: MediaStream, receiver: RTCRtpReceiver) => void;
     activeSpeakersUpdate: (speakers: Array<SpeakerInfo>) => void;
-    dataPacketReceived: (packet: DataPacket) => void;
+    dataPacketReceived: (packet: DataPacket, encryptionType: Encryption_Type) => void;
     transcriptionReceived: (transcription: Transcription) => void;
-    transportsCreated: (publisher: PCTransport, subscriber: PCTransport) => void;
+    transportsCreated: (publisher: PCTransport, subscriber?: PCTransport) => void;
     /** @internal */
     trackSenderAdded: (track: Track, sender: RTCRtpSender) => void;
     rtpVideoMapUpdate: (rtpMap: Map<number, VideoCodec>) => void;

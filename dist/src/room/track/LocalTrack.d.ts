@@ -23,11 +23,10 @@ export default abstract class LocalTrack<TrackKind extends Track.Kind = Track.Ki
     protected pauseUpstreamLock: Mutex;
     protected processorElement?: HTMLMediaElement;
     protected processor?: TrackProcessor<TrackKind, any>;
-    protected processorLock: Mutex;
     protected audioContext?: AudioContext;
     protected manuallyStopped: boolean;
     protected localTrackRecorder: LocalTrackRecorder<typeof this> | undefined;
-    private restartLock;
+    protected trackChangeLock: Mutex;
     /**
      *
      * @param mediaTrack
@@ -104,12 +103,19 @@ export default abstract class LocalTrack<TrackKind extends Track.Kind = Track.Ki
      * @returns
      */
     stopProcessor(keepElement?: boolean): Promise<void>;
+    /**
+     * @internal
+     * This method assumes the caller has acquired a trackChangeLock already.
+     * The public facing method for stopping the processor is `stopProcessor` and it wraps this method in the trackChangeLock.
+     */
+    protected internalStopProcessor(keepElement?: boolean): Promise<void>;
     /** @internal */
     startPreConnectBuffer(timeslice?: number): void;
     /** @internal */
     stopPreConnectBuffer(): void;
     /** @internal */
-    getPreConnectBuffer(): ReadableStream<Uint8Array<ArrayBufferLike>> | undefined;
+    getPreConnectBuffer(): ReadableStream<Uint8Array> | undefined;
+    getPreConnectBufferMimeType(): string | undefined;
     protected abstract monitorSender(): void;
 }
 //# sourceMappingURL=LocalTrack.d.ts.map

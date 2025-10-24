@@ -15,6 +15,7 @@ export declare abstract class Track<TrackKind extends Track.Kind = Track.Kind> e
     attachedElements: HTMLMediaElement[];
     isMuted: boolean;
     source: Track.Source;
+    private _streamState;
     /**
      * sid is set after track is published to server, or if it's a remote track
      */
@@ -27,7 +28,9 @@ export declare abstract class Track<TrackKind extends Track.Kind = Track.Kind> e
      * indicates current state of stream, it'll indicate `paused` if the track
      * has been paused by congestion controller
      */
-    streamState: Track.StreamState;
+    get streamState(): Track.StreamState;
+    /** @internal */
+    setStreamState(value: Track.StreamState): void;
     /** @internal */
     rtpTimestamp: number | undefined;
     protected _mediaStreamTrack: MediaStreamTrack;
@@ -146,6 +149,7 @@ export type TrackEventCallbacks = {
         rtpTimestamp: number;
     }) => void;
     preConnectBufferFlushed: (buffer: Uint8Array[]) => void;
+    cpuConstrained: () => void;
 };
 export {};
 //# sourceMappingURL=Track.d.ts.map

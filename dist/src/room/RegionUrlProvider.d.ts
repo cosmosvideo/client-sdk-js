@@ -4,7 +4,7 @@ export declare class RegionUrlProvider {
     private token;
     private regionSettings;
     private lastUpdateAt;
-    private settingsCacheTime;
+    private settingsCacheTimeInMs;
     private attemptedRegions;
     constructor(url: string, token: string);
     updateToken(token: string): void;
