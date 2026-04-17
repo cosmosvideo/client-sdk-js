@@ -107,6 +107,8 @@ import {
   unwrapConstraint,
 } from './utils';
 
+import { debounce } from 'ts-debounce';
+
 export enum ConnectionState {
   Disconnected = 'disconnected',
   Connecting = 'connecting',
@@ -1941,33 +1943,66 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
     }
   };
 
-  /**
-   * attempt to select the default devices if the previously selected devices are no longer available after a device change event
-   */
-  private async selectDefaultDevices() {
+  private handleDeviceChange = debounce(async (ev: Event) => {
     const previousDevices = DeviceManager.getInstance().previousDevices;
     // check for available devices, but don't request permissions in order to avoid prompts for kinds that haven't been used before
     const availableDevices = await DeviceManager.getInstance().getDevices(undefined, false);
     const browser = getBrowser();
     if (browser?.name === 'Chrome' && browser.os !== 'iOS') {
+      console.log('sdk>> availableDevices', availableDevices);
+      console.log('sdk>> previousDevices', previousDevices);
       for (let availableDevice of availableDevices) {
         const previousDevice = previousDevices.find(
-          (info) => info.deviceId === availableDevice.deviceId,
+          (info) => info.deviceId === availableDevice.deviceId && info.kind === availableDevice.kind
         );
         if (
           previousDevice &&
           previousDevice.label !== '' &&
           previousDevice.kind === availableDevice.kind &&
-          previousDevice.label !== availableDevice.label
+          previousDevice.label !== availableDevice.label &&
+          availableDevice.deviceId == 'default'
         ) {
           // label has changed on device the same deviceId, indicating that the default device has changed on the OS level
           if (this.getActiveDevice(availableDevice.kind) === 'default') {
-            // emit an active device change event only if the selected output device is actually on `default`
-            this.emit(
-              RoomEvent.ActiveDeviceChanged,
-              availableDevice.kind,
-              availableDevice.deviceId,
-            );
+              const previousDefaultDevice = previousDevices.find(
+                (info) => info.kind === availableDevice.kind && previousDevice.label.includes(info.label) && info.deviceId !== previousDevice.deviceId
+              );
+              // check if the previous default device is available
+              if(previousDefaultDevice){
+                const previousDefaultDeviceAvailable = availableDevices.find(
+                  (info) => previousDefaultDevice?.deviceId === info.deviceId
+                );
+                if(previousDefaultDeviceAvailable){
+                  console.log("sdk>> 1st event", availableDevice, previousDevice);
+                  this.emit(
+                    RoomEvent.RequestDefaultMicSwitch,
+                    availableDevice.kind,
+                    previousDefaultDevice.deviceId
+                  );
+                }else{
+                  this.emit(
+                    RoomEvent.ActiveDeviceChanged,
+                    availableDevice.kind,
+                    availableDevice.deviceId,
+                  );
+                }
+              }else{
+                this.emit(
+                  RoomEvent.ActiveDeviceChanged,
+                  availableDevice.kind,
+                  availableDevice.deviceId,
+                );
+              }
+          }else{
+            console.log("sdk>> 2nd event", availableDevice, previousDevice);
+            const activeDeviceId = this.getActiveDevice(availableDevice.kind);
+            if(activeDeviceId){
+              this.emit(
+                RoomEvent.RequestDefaultMicSwitch,
+                availableDevice.kind,
+                activeDeviceId,
+              );
+            }
           }
         }
       }
@@ -1988,6 +2023,7 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         // in  Safari the first device is always the default, so we assume a user on the default device would like to switch to the default once it changes
         // FF doesn't emit an event when the default device changes, so we perform the same best effort and switch to the new device once connected and if it's the first in the array
         if (devicesOfKind.length > 0 && devicesOfKind[0]?.deviceId !== activeDevice) {
+          console.log('switching to first device', devicesOfKind[0].deviceId);
           await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
           continue;
         }
@@ -2004,18 +2040,12 @@ class Room extends (EventEmitter as new () => TypedEmitter<RoomEventCallbacks>) 
         // avoid switching audio output on safari without explicit user action as it leads to slowed down audio playback
         (kind !== 'audiooutput' || !isSafariBased())
       ) {
+        console.log('switching to second device', devicesOfKind[0].deviceId);
         await this.switchActiveDevice(kind, devicesOfKind[0].deviceId);
       }
     }
-  }
-
-  private handleDeviceChange = async () => {
-    if (getBrowser()?.os !== 'iOS') {
-      // default devices are non deterministic on iOS, so we don't attempt to select them here
-      await this.selectDefaultDevices();
-    }
     this.emit(RoomEvent.MediaDevicesChanged);
-  };
+  }, 500);
 
   private handleRoomUpdate = (room: RoomModel) => {
     const oldRoom = this.roomInfo;
@@ -2687,6 +2717,7 @@ export type RoomEventCallbacks = {
   encryptionError: (error: Error) => void;
   dcBufferStatusChanged: (isLow: boolean, kind: DataPacket_Kind) => void;
   activeDeviceChanged: (kind: MediaDeviceKind, deviceId: string) => void;
+  requestDefaultMicSwitch: (kind: MediaDeviceKind,deviceId: string) => void;
   chatMessage: (message: ChatMessage, participant?: RemoteParticipant | LocalParticipant) => void;
   localTrackSubscribed: (publication: LocalTrackPublication, participant: LocalParticipant) => void;
   metricsReceived: (metrics: MetricsBatch, participant?: Participant) => void;

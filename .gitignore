@@ -80,7 +80,9 @@ typings/
 
 # Nuxt.js build / generate output
 .nuxt
-dist
+# `dist/` is committed on this branch so GitHub tarball installs are usable
+# without a prepare script. Upstream builds in CI; we don't.
+# dist
 
 # Gatsby files
 .cache/
